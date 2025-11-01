@@ -50,7 +50,7 @@ const NOTICIAS_DATA = [
   {
     titulo: '🚨 IMPORTANTE: Nueva Funcionalidad',
     fecha: '01/11/2025',
-    contenido: 'El portal ahora muestra tu nombre en lugar de tu chapa. Si quieres quye se muestre tu nombre en vez de tu chapa, comunícale tu nombre al administrador.'
+    contenido: 'El portal ahora muestra tu nombre en lugar de tu chapa. Si quieres que se muestre tu nombre en vez de tu chapa, comunícale tu nombre al administrador.'
   },
   {
     titulo: '📢 Actualización del Sistema',
@@ -1546,4 +1546,5 @@ function escapeHtml(text) {
 // Exponer funciones globalmente si es necesario
 window.AppState = AppState;
 window.navigateTo = navigateTo;
+
 
