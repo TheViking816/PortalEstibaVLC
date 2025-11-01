@@ -46,7 +46,18 @@ const ENLACES_DATA = [
 ];
 
 // Noticias y avisos - Añadir contenido real aquí
-const NOTICIAS_DATA = [];
+const NOTICIAS_DATA = [
+  {
+    titulo: '🚨 IMPORTANTE: Nueva Funcionalidad',
+    fecha: '01/11/2025',
+    contenido: 'El portal ahora muestra tu nombre en lugar de tu chapa. Si quieres quye se muestre tu nombre en vez de tu chapa, comunícale tu nombre al administrador.'
+  },
+  {
+    titulo: '📢 Actualización del Sistema',
+    fecha: '01/11/2025',
+    contenido: 'Se ha mejorado el sistema de jornales. Ahora puedes exportar a CSV y ver tus jornales organizados por quincenas.'
+  }
+];
 
 /**
  * Inicialización de la aplicación
@@ -1535,3 +1546,4 @@ function escapeHtml(text) {
 // Exponer funciones globalmente si es necesario
 window.AppState = AppState;
 window.navigateTo = navigateTo;
+
