@@ -50,7 +50,7 @@ const NOTICIAS_DATA = [
   {
     titulo: '🚨 IMPORTANTE: Nueva Funcionalidad',
     fecha: '01/11/2025',
-    contenido: 'El portal ahora muestra tu nombre en lugar de tu chapa. Si quieres que se muestre tu nombre en vez de tu chapa, comunícale tu nombre al administrador.'
+    contenido: 'Si quieres que se muestre tu nombre en vez de tu chapa, comunícale tu nombre al administrador.'
   },
   {
     titulo: '📢 Actualización del Sistema',
@@ -73,7 +73,7 @@ document.addEventListener('DOMContentLoaded', () => {
 /**
  * Inicializa la aplicación
  */
-function initializeApp() {
+async function initializeApp() {
   // Cargar contenido estático
   renderEnlaces();
   renderNoticias();
@@ -81,7 +81,9 @@ function initializeApp() {
   // Verificar si hay sesión guardada
   const storedChapa = localStorage.getItem('currentChapa');
   if (storedChapa) {
-    loginUser(storedChapa);
+    // Obtener nombre actualizado del sheet
+    const nombre = await SheetsAPI.getNombrePorChapa(storedChapa);
+    loginUser(storedChapa, nombre);
   } else {
     showPage('login');
   }
@@ -199,8 +201,11 @@ function setupEventListeners() {
  */
 function checkStoredSession() {
   const storedChapa = localStorage.getItem('currentChapa');
+  const storedName = localStorage.getItem('currentUserName');
+
   if (storedChapa) {
     AppState.currentUser = storedChapa;
+    AppState.currentUserName = storedName || `Chapa ${storedChapa}`;
     AppState.isAuthenticated = true;
     updateUIForAuthenticatedUser();
   }
@@ -239,33 +244,34 @@ async function handleLogin() {
   errorMsg.classList.remove('active');
 
   try {
+    // Obtener usuarios del CSV (necesario para obtener el nombre)
+    const usuarios = await SheetsAPI.getUsuarios();
+
     // Verificar si hay override de contraseña en localStorage
     const passwordOverrides = JSON.parse(localStorage.getItem('password_overrides') || '{}');
     const customPassword = passwordOverrides[chapa];
 
-    if (customPassword) {
-      // Validar contra contraseña personalizada
-      if (password === customPassword) {
-        loginUser(chapa);
-        return;
-      } else {
-        throw new Error('Contraseña incorrecta');
-      }
-    }
-
-    // Obtener usuarios del CSV
-    const usuarios = await SheetsAPI.getUsuarios();
-
-    // Buscar usuario
+    // Buscar usuario para obtener nombre
     const usuario = usuarios.find(u => u.chapa === chapa);
 
     if (!usuario) {
       throw new Error('Chapa no encontrada');
     }
 
-    // Validar contraseña
-    if (usuario.contrasena === password) {
-      loginUser(chapa);
+    // Determinar si la contraseña es válida
+    let passwordValida = false;
+
+    if (customPassword) {
+      // Validar contra contraseña personalizada
+      passwordValida = (password === customPassword);
+    } else {
+      // Validar contra contraseña del sheet
+      passwordValida = (usuario.contrasena === password);
+    }
+
+    if (passwordValida) {
+      // Login exitoso - guardar chapa y nombre
+      loginUser(chapa, usuario.nombre || `Chapa ${chapa}`);
     } else {
       throw new Error('Contraseña incorrecta');
     }
@@ -290,12 +296,19 @@ async function handleLogin() {
 /**
  * Inicia sesión de usuario
  */
-function loginUser(chapa) {
+function loginUser(chapa, nombre = null) {
   AppState.currentUser = chapa;
+  AppState.currentUserName = nombre || `Chapa ${chapa}`;
   AppState.isAuthenticated = true;
 
   // Guardar en localStorage
   localStorage.setItem('currentChapa', chapa);
+  localStorage.setItem('currentUserName', AppState.currentUserName);
+
+  // Actualizar cache de usuarios para el foro
+  const usuariosCache = JSON.parse(localStorage.getItem('usuarios_cache') || '{}');
+  usuariosCache[chapa] = AppState.currentUserName;
+  localStorage.setItem('usuarios_cache', JSON.stringify(usuariosCache));
 
   // Actualizar UI
   updateUIForAuthenticatedUser();
@@ -312,12 +325,12 @@ function updateUIForAuthenticatedUser() {
   const userChapa = document.getElementById('user-chapa');
 
   if (userInfo) userInfo.classList.remove('hidden');
-  if (userChapa) userChapa.textContent = `Chapa ${AppState.currentUser}`;
+  if (userChapa) userChapa.textContent = AppState.currentUserName || `Chapa ${AppState.currentUser}`;
 
   // Actualizar mensaje de bienvenida
   const welcomeMsg = document.getElementById('welcome-message');
   if (welcomeMsg) {
-    welcomeMsg.textContent = `Bienvenido, Chapa ${AppState.currentUser}`;
+    welcomeMsg.textContent = `Bienvenido, ${AppState.currentUserName || `Chapa ${AppState.currentUser}`}`;
   }
 }
 
@@ -962,6 +975,25 @@ function createQuincenaCard(year, month, quincena, jornales) {
     </div>
   `;
 
+  // Agregar indicador de desplegable más visible debajo del header
+  const indicador = document.createElement('div');
+  indicador.style.padding = '0.75rem 1.25rem';
+  indicador.style.background = 'white';
+  indicador.style.borderBottom = '1px solid var(--border-color)';
+  indicador.style.fontSize = '0.85rem';
+  indicador.style.color = '#000';
+  indicador.style.fontWeight = '600';
+  indicador.style.display = 'flex';
+  indicador.style.alignItems = 'center';
+  indicador.style.gap = '0.5rem';
+  indicador.style.cursor = 'pointer';
+  indicador.innerHTML = `
+    <svg xmlns="http://www.w3.org/2000/svg" style="width: 16px; height: 16px; flex-shrink: 0;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+    </svg>
+    <span>Haz click arriba para ver el detalle completo de esta quincena</span>
+  `;
+
   // Efectos hover para hacer más obvio que es clickeable
   header.addEventListener('mouseenter', () => {
     header.style.transform = 'scale(1.01)';
@@ -1047,15 +1079,35 @@ function createQuincenaCard(year, month, quincena, jornales) {
     </div>
   `;
 
-  // Toggle expand/collapse
-  header.addEventListener('click', () => {
+  // Función para toggle expand/collapse
+  const toggleExpand = () => {
     const isExpanded = body.style.display !== 'none';
     body.style.display = isExpanded ? 'none' : 'block';
+    indicador.style.display = isExpanded ? 'flex' : 'none';
     const icon = header.querySelector('.expand-icon');
     icon.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(180deg)';
+    const indicadorIcon = indicador.querySelector('svg');
+    if (indicadorIcon) {
+      indicadorIcon.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(180deg)';
+    }
+  };
+
+  // Click handler para header
+  header.addEventListener('click', toggleExpand);
+
+  // Click handler para indicador
+  indicador.addEventListener('click', toggleExpand);
+
+  // Hover effect para indicador
+  indicador.addEventListener('mouseenter', () => {
+    indicador.style.background = 'var(--bg-secondary)';
+  });
+  indicador.addEventListener('mouseleave', () => {
+    indicador.style.background = 'white';
   });
 
   card.appendChild(header);
+  card.appendChild(indicador);
   card.appendChild(body);
 
   return card;
@@ -1370,6 +1422,9 @@ async function loadForo() {
   container.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-secondary);">Cargando mensajes...</div>';
 
   try {
+    // Actualizar nombres de usuarios en cache
+    await actualizarCacheNombres();
+
     // Intentar cargar desde Google Sheets
     const sheetMessages = await SheetsAPI.getForoMensajes();
 
@@ -1390,6 +1445,27 @@ async function loadForo() {
     // Fallback a localStorage
     const localMessages = getForoMessagesLocal();
     renderForoMessages(localMessages);
+  }
+}
+
+/**
+ * Actualiza el cache de nombres de usuarios desde el sheet
+ */
+async function actualizarCacheNombres() {
+  try {
+    const usuarios = await SheetsAPI.getUsuarios();
+    const usuariosCache = {};
+
+    usuarios.forEach(u => {
+      if (u.chapa && u.nombre) {
+        usuariosCache[u.chapa] = u.nombre;
+      }
+    });
+
+    localStorage.setItem('usuarios_cache', JSON.stringify(usuariosCache));
+    console.log('✅ Cache de nombres actualizado');
+  } catch (error) {
+    console.error('Error actualizando cache de nombres:', error);
   }
 }
 
@@ -1421,16 +1497,22 @@ function renderForoMessages(messages) {
   // Ordenar por timestamp (más ANTIGUOS primero, recientes abajo)
   const sorted = messages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
+  // Obtener nombres de usuarios del cache
+  const usuariosCache = JSON.parse(localStorage.getItem('usuarios_cache') || '{}');
+
   sorted.forEach(msg => {
     const isOwn = msg.chapa === AppState.currentUser;
     const timeAgo = getTimeAgo(new Date(msg.timestamp));
+
+    // Obtener nombre del usuario (del cache o fallback a chapa)
+    const nombreUsuario = usuariosCache[msg.chapa] || `Chapa ${msg.chapa}`;
 
     const messageDiv = document.createElement('div');
     messageDiv.className = `foro-message ${isOwn ? 'own' : ''}`;
     messageDiv.innerHTML = `
       <div class="foro-message-content">
         <div class="foro-message-header">
-          <span class="foro-message-chapa">Chapa ${msg.chapa}</span>
+          <span class="foro-message-chapa">${nombreUsuario}</span>
           <span class="foro-message-time">${timeAgo}</span>
         </div>
         <div class="foro-message-text" style="white-space: pre-wrap;">${escapeHtml(msg.texto)}</div>
@@ -1546,5 +1628,3 @@ function escapeHtml(text) {
 // Exponer funciones globalmente si es necesario
 window.AppState = AppState;
 window.navigateTo = navigateTo;
-
-
