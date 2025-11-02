@@ -47,16 +47,27 @@ const ENLACES_DATA = [
 
 // Noticias y avisos - Añadir contenido real aquí
 const NOTICIAS_DATA = [
-  {
+   {
+    titulo: '🚀 ¡Nueva Función: Posición en la Puerta!',
+    fecha: '02/11/2025', // <-- Recuerda ajustar la fecha si lo necesitas
+    contenido: `Ahora puedes ver en la pantalla de "Dashboard" (justo debajo de tu nombre) a cuántas posiciones estás de la última puerta contratada.
+    <ul style="list-style-type: disc; margin-left: 20px; margin-top: 10px;">
+      <li style="margin-bottom: 5px;">El sistema calcula tu distancia automáticamente.</li>
+      <li style="margin-bottom: 5px;">Importante: El cálculo tiene en cuenta si perteneces al censo de <b>SP</b> (Servicio Portuario) o al de <b>OC</b> (Operaciones Complementarias) y te compara con la puerta correspondiente a tu censo.</li>
+      <li>Así sabrás de un vistazo cuánto falta para tu próxima contratación.</li>
+    </ul>`
+},
+  {     
     titulo: '🚨 IMPORTANTE: Nueva Funcionalidad',
     fecha: '01/11/2025',
     contenido: 'Si quieres que se muestre tu nombre en vez de tu chapa, comunícale tu nombre al administrador.'
   },
   {
-    titulo: '📢 ción del Sistema',
+    titulo: '📢 Actualización del Sistema',
     fecha: '01/11/2025',
     contenido: 'Se ha mejorado el sistema de jornales. Ahora puedes exportar a CSV y ver tus jornales organizados por quincenas.'
   }
+
 ];
 
 /**
@@ -1738,3 +1749,4 @@ function escapeHtml(text) {
 // Exponer funciones globalmente si es necesario
 window.AppState = AppState;
 window.navigateTo = navigateTo;
+
