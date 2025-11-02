@@ -53,7 +53,7 @@ const NOTICIAS_DATA = [
     contenido: `Ahora puedes ver en la pantalla de "Dashboard" (justo debajo de tu nombre) a cuántas posiciones estás de la última puerta contratada.
     <ul style="list-style-type: disc; margin-left: 20px; margin-top: 10px;">
       <li style="margin-bottom: 5px;">El sistema calcula tu distancia automáticamente.</li>
-      <li style="margin-bottom: 5px;">Importante: El cálculo tiene en cuenta si perteneces al censo de <b>SP</b> (Servicio Portuario) o al de <b>OC</b> (Operaciones Complementarias) y te compara con la puerta correspondiente a tu censo.</li>
+      <li style="margin-bottom: 5px;">Importante: El cálculo tiene en cuenta si perteneces al censo de <b>SP</b> (Servicio Público) o al de <b>OC</b> (Operaciones Complementarias) y te compara con la puerta correspondiente a tu censo.</li>
       <li>Así sabrás de un vistazo cuánto falta para tu próxima contratación.</li>
     </ul>`
 },
@@ -1780,5 +1780,6 @@ function escapeHtml(text) {
 // Exponer funciones globalmente si es necesario
 window.AppState = AppState;
 window.navigateTo = navigateTo;
+
 
 
