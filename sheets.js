@@ -104,13 +104,20 @@ async function fetchSheetData(sheetId, gid, useCache = true) {
 
   try {
     const url = getSheetCSVUrl(sheetId, gid);
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      headers: {
+        'Accept-Charset': 'utf-8'
+      }
+    });
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    const csv = await response.text();
+    // Asegurar lectura UTF-8
+    const buffer = await response.arrayBuffer();
+    const decoder = new TextDecoder('utf-8');
+    const csv = decoder.decode(buffer);
     const data = parseCSV(csv);
 
     // Guardar en cache
@@ -145,12 +152,19 @@ const SheetsAPI = {
     try {
       const puertasURL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQrQ5bGZDNShEWi1lwx_l1EvOxC0si5kbN8GBxj34rF0FkyGVk6IZOiGk5D91_TZXBHO1mchydFvvUl/pub?gid=3770623&single=true&output=csv';
 
-      const response = await fetch(puertasURL);
+      const response = await fetch(puertasURL, {
+        headers: {
+          'Accept-Charset': 'utf-8'
+        }
+      });
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const csvText = await response.text();
+      // Asegurar lectura UTF-8
+      const buffer = await response.arrayBuffer();
+      const decoder = new TextDecoder('utf-8');
+      const csvText = decoder.decode(buffer);
       console.log('=== PUERTAS CSV RAW (primeros 300 chars) ===');
       console.log(csvText.substring(0, 300));
 
@@ -160,10 +174,12 @@ const SheetsAPI = {
       // Definir el orden fijo de jornadas
       const jornadasOrdenadas = ['02-08', '08-14', '14-20', '20-02', 'Festivo'];
 
-      // Inicializar objeto para almacenar la primera puerta de cada jornada
-      const primeraPuertaPorJornada = {};
+      // Inicializar objetos para almacenar las puertas de cada jornada
+      const primeraPuertaPorJornada = {};  // Puerta SP (índice 3)
+      const segundaPuertaPorJornada = {};  // Puerta OC (índice 4)
       jornadasOrdenadas.forEach(j => {
         primeraPuertaPorJornada[j] = '';
+        segundaPuertaPorJornada[j] = '';
       });
 
       let fecha = '';
@@ -210,12 +226,20 @@ const SheetsAPI = {
 
         // Solo procesar si es turno válido o Festivo
         if (jornadasOrdenadas.includes(jornada)) {
-          // Tomar solo la PRIMERA puerta (índice 3 = columna 4)
+          // Tomar la PRIMERA puerta SP (índice 3 = columna 4)
           const primeraPuerta = columns[3];
           if (primeraPuerta && primeraPuerta !== '' && primeraPuertaPorJornada[jornada] === '') {
             // Solo asignar si aún no tiene valor
             primeraPuertaPorJornada[jornada] = primeraPuerta;
-            console.log(`Jornada ${jornada}: puerta ${primeraPuerta}`);
+            console.log(`Jornada ${jornada}: puerta SP ${primeraPuerta}`);
+          }
+
+          // Tomar la SEGUNDA puerta OC (índice 4 = columna 5)
+          const segundaPuerta = columns[4];
+          if (segundaPuerta && segundaPuerta !== '' && segundaPuertaPorJornada[jornada] === '') {
+            // Solo asignar si aún no tiene valor
+            segundaPuertaPorJornada[jornada] = segundaPuerta;
+            console.log(`Jornada ${jornada}: puerta OC ${segundaPuerta}`);
           }
         }
       }
@@ -224,7 +248,7 @@ const SheetsAPI = {
       const puertas = jornadasOrdenadas.map(jornada => ({
         jornada: jornada,
         puertaSP: primeraPuertaPorJornada[jornada],
-        puertaOC: '' // Por ahora solo SP, luego agregaremos OC si es necesario
+        puertaOC: segundaPuertaPorJornada[jornada]
       }));
 
       console.log('=== PUERTAS FINALES ===');
@@ -647,7 +671,7 @@ const SheetsAPI = {
 
   /**
    * Obtiene usuarios desde Google Sheet para validación de login
-   * Estructura CSV: Contraseña (columna A), Chapa (columna B)
+   * Estructura CSV: Contraseña (columna A), Chapa (columna B), Nombre (columna C)
    * URL: Sheet "usuarios"
    */
   async getUsuarios() {
@@ -674,11 +698,13 @@ const SheetsAPI = {
         if (fields.length >= 2) {
           const contrasena = fields[0] ? fields[0].trim() : '';
           const chapa = fields[1] ? fields[1].trim() : '';
+          const nombre = fields[2] ? fields[2].trim() : '';  // Nueva: columna C
 
           if (contrasena && chapa) {
             usuarios.push({
               chapa: chapa,
-              contrasena: contrasena
+              contrasena: contrasena,
+              nombre: nombre || `Chapa ${chapa}`  // Fallback si no hay nombre
             });
           }
         }
@@ -690,6 +716,38 @@ const SheetsAPI = {
     } catch (error) {
       console.error('Error obteniendo usuarios:', error);
       return [];
+    }
+  },
+
+  /**
+   * Obtiene el nombre de un usuario por su chapa
+   * Primero busca en localStorage (cache), luego en el sheet
+   */
+  async getNombrePorChapa(chapa) {
+    try {
+      // Buscar en cache de localStorage primero
+      const usuariosCache = JSON.parse(localStorage.getItem('usuarios_cache') || '{}');
+      if (usuariosCache[chapa]) {
+        return usuariosCache[chapa];
+      }
+
+      // Si no está en cache, obtener todos los usuarios
+      const usuarios = await this.getUsuarios();
+      const usuario = usuarios.find(u => u.chapa === chapa);
+
+      if (usuario && usuario.nombre) {
+        // Guardar en cache
+        usuariosCache[chapa] = usuario.nombre;
+        localStorage.setItem('usuarios_cache', JSON.stringify(usuariosCache));
+        return usuario.nombre;
+      }
+
+      // Fallback
+      return `Chapa ${chapa}`;
+
+    } catch (error) {
+      console.error('Error obteniendo nombre:', error);
+      return `Chapa ${chapa}`;
     }
   },
 
