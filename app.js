@@ -583,6 +583,10 @@ function closeSidebar() {
 /**
  * Carga la página de contratación
  */
+/**
+ * Carga la página de contratación - VERSIÓN CORREGIDA
+ * Muestra TODAS las contrataciones de las últimas 2 semanas, agrupadas por fecha
+ */
 async function loadContratacion() {
   const container = document.getElementById('contratacion-content');
   const loading = document.getElementById('contratacion-loading');
@@ -595,21 +599,29 @@ async function loadContratacion() {
   try {
     const allData = await SheetsAPI.getContrataciones(AppState.currentUser);
 
-    // Solo mostrar la contratación ACTUAL (la más reciente)
-    // Ordenar por fecha descendente y tomar solo las del día más reciente
+    // Ordenar por fecha descendente (más recientes primero)
     const sortedData = allData.sort((a, b) => {
       const dateA = new Date(a.fecha.split('/').reverse().join('-'));
       const dateB = new Date(b.fecha.split('/').reverse().join('-'));
       return dateB - dateA;
     });
 
-    // Tomar solo las contrataciones de la fecha más reciente
-    const data = sortedData.length > 0
-      ? sortedData.filter(item => item.fecha === sortedData[0].fecha)
-      : [];
+    // Filtrar contrataciones de las últimas 2 semanas
+    const haceDosSemanas = new Date();
+    haceDosSemanas.setDate(haceDosSemanas.getDate() - 1);
+
+    const data = sortedData.filter(item => {
+      const fechaParts = item.fecha.split('/');
+      const fechaItem = new Date(
+        parseInt(fechaParts[2]),
+        parseInt(fechaParts[1]) - 1,
+        parseInt(fechaParts[0])
+      );
+      return fechaItem >= haceDosSemanas;
+    });
 
     // Guardar TODAS las contrataciones en el histórico de jornales
-    // Esto se usará en la pestaña "Mis Jornales"
+    // IMPORTANTE: Ahora incluye la chapa en el check de duplicados
     if (allData.length > 0) {
       const historico = JSON.parse(localStorage.getItem('jornales_historico') || '[]');
 
@@ -618,7 +630,8 @@ async function loadContratacion() {
         const existe = historico.some(h =>
           h.fecha === nueva.fecha &&
           h.jornada === nueva.jornada &&
-          h.puesto === nueva.puesto
+          h.puesto === nueva.puesto &&
+          h.chapa === nueva.chapa  // ← CORREGIDO: Incluir chapa en el check
         );
         if (!existe) {
           historico.push(nueva);
@@ -636,8 +649,8 @@ async function loadContratacion() {
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
-          <h3>No hay asignaciones hoy</h3>
-          <p>Actualmente no tienes contrataciones asignadas para el día de hoy.</p>
+          <h3>No hay asignaciones recientes</h3>
+          <p>No tienes contrataciones asignadas.</p>
         </div>
       `;
       return;
@@ -659,105 +672,123 @@ async function loadContratacion() {
       return empresaLogos[empresaUpper] || null;
     };
 
-    // Mostrar la fecha de la contratación actual
-    const fechaInfo = document.createElement('div');
-    fechaInfo.style.marginBottom = '1.5rem';
-    fechaInfo.style.padding = '1rem';
-    fechaInfo.style.background = 'white';
-    fechaInfo.style.color = 'var(--puerto-dark-blue)';
-    fechaInfo.style.border = '2px solid var(--puerto-blue)';
-    fechaInfo.style.borderRadius = '12px';
-    fechaInfo.style.textAlign = 'center';
-    fechaInfo.style.fontSize = '1.1rem';
-    fechaInfo.style.fontWeight = 'bold';
-    fechaInfo.innerHTML = `📅 Contratación del ${data[0].fecha}`;
-    container.appendChild(fechaInfo);
-
-    // Renderizar tarjetas (mejor para móvil)
-    const cardsContainer = document.createElement('div');
-    cardsContainer.className = 'contratacion-cards';
-    cardsContainer.style.display = 'grid';
-    cardsContainer.style.gap = '1.5rem';
-    cardsContainer.style.gridTemplateColumns = 'repeat(auto-fit, minmax(280px, 1fr))';
-
-    data.forEach(row => {
-      const logo = getEmpresaLogo(row.empresa);
-
-      const card = document.createElement('div');
-      card.className = 'contratacion-card';
-      card.style.background = 'white';
-      card.style.borderRadius = '16px';
-      card.style.border = '2px solid var(--border-color)';
-      card.style.overflow = 'hidden';
-      card.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
-      card.style.transition = 'transform 0.2s, box-shadow 0.2s';
-
-      card.innerHTML = `
-        ${logo ? `
-          <div style="background: white; padding: 1.5rem; display: flex; align-items: center; justify-content: center; min-height: 120px; border-bottom: 2px solid var(--border-color);">
-            <img src="${logo}" alt="${row.empresa}" style="max-width: 100%; max-height: 100px; object-fit: contain;">
-          </div>
-        ` : `
-          <div style="background: linear-gradient(135deg, var(--puerto-blue), var(--puerto-dark-blue)); padding: 2rem; text-align: center;">
-            <div style="color: white; font-size: 1.5rem; font-weight: bold;">${row.empresa}</div>
-          </div>
-        `}
-        <div style="padding: 1.5rem;">
-          <div style="margin-bottom: 1rem;">
-            <div style="color: var(--puerto-blue); font-weight: bold; font-size: 1.25rem; margin-bottom: 0.5rem;">
-              ${row.puesto}
-            </div>
-            <div style="color: var(--text-secondary); font-size: 0.9rem;">Puesto asignado</div>
-          </div>
-
-          <div style="display: grid; gap: 0.75rem;">
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
-              <svg xmlns="http://www.w3.org/2000/svg" style="width: 20px; height: 20px; color: var(--puerto-blue);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <div>
-                <div style="font-size: 0.85rem; color: var(--text-secondary);">Jornada</div>
-                <div style="font-weight: 600;">${row.jornada}</div>
-              </div>
-            </div>
-
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
-              <svg xmlns="http://www.w3.org/2000/svg" style="width: 20px; height: 20px; color: var(--puerto-green);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <div>
-                <div style="font-size: 0.85rem; color: var(--text-secondary);">Buque</div>
-                <div style="font-weight: 600;">${row.buque}</div>
-              </div>
-            </div>
-
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
-              <svg xmlns="http://www.w3.org/2000/svg" style="width: 20px; height: 20px; color: var(--puerto-orange);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-              <div>
-                <div style="font-size: 0.85rem; color: var(--text-secondary);">Parte</div>
-                <div style="font-weight: 600;">${row.parte}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      `;
-
-      // Efecto hover
-      card.addEventListener('mouseenter', () => {
-        card.style.transform = 'translateY(-4px)';
-        card.style.boxShadow = '0 8px 24px rgba(0,0,0,0.12)';
-      });
-      card.addEventListener('mouseleave', () => {
-        card.style.transform = 'translateY(0)';
-        card.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
-      });
-
-      cardsContainer.appendChild(card);
+    // AGRUPAR CONTRATACIONES POR FECHA
+    const contratacionesPorFecha = {};
+    data.forEach(contratacion => {
+      if (!contratacionesPorFecha[contratacion.fecha]) {
+        contratacionesPorFecha[contratacion.fecha] = [];
+      }
+      contratacionesPorFecha[contratacion.fecha].push(contratacion);
     });
 
-    container.appendChild(cardsContainer);
+    // Obtener fechas únicas ordenadas
+    const fechasUnicas = Object.keys(contratacionesPorFecha);
+
+    // Renderizar cada fecha con sus contrataciones
+    fechasUnicas.forEach((fecha, index) => {
+      const contratacionesFecha = contratacionesPorFecha[fecha];
+
+      // Header de fecha
+      const fechaInfo = document.createElement('div');
+      fechaInfo.style.marginBottom = '1.5rem';
+      fechaInfo.style.marginTop = index > 0 ? '2.5rem' : '0';
+      fechaInfo.style.padding = '1rem';
+      fechaInfo.style.background = 'white';
+      fechaInfo.style.color = 'var(--puerto-dark-blue)';
+      fechaInfo.style.border = '2px solid var(--puerto-blue)';
+      fechaInfo.style.borderRadius = '12px';
+      fechaInfo.style.textAlign = 'center';
+      fechaInfo.style.fontSize = '1.1rem';
+      fechaInfo.style.fontWeight = 'bold';
+      fechaInfo.innerHTML = `📅 Contratación del ${fecha} (${contratacionesFecha.length} asignación${contratacionesFecha.length > 1 ? 'es' : ''})`;
+      container.appendChild(fechaInfo);
+
+      // Grid de tarjetas para esta fecha
+      const cardsContainer = document.createElement('div');
+      cardsContainer.className = 'contratacion-cards';
+      cardsContainer.style.display = 'grid';
+      cardsContainer.style.gap = '1.5rem';
+      cardsContainer.style.gridTemplateColumns = 'repeat(auto-fit, minmax(280px, 1fr))';
+
+      contratacionesFecha.forEach(row => {
+        const logo = getEmpresaLogo(row.empresa);
+
+        const card = document.createElement('div');
+        card.className = 'contratacion-card';
+        card.style.background = 'white';
+        card.style.borderRadius = '16px';
+        card.style.border = '2px solid var(--border-color)';
+        card.style.overflow = 'hidden';
+        card.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
+        card.style.transition = 'transform 0.2s, box-shadow 0.2s';
+
+        card.innerHTML = `
+          ${logo ? `
+            <div style="background: white; padding: 1.5rem; display: flex; align-items: center; justify-content: center; min-height: 120px; border-bottom: 2px solid var(--border-color);">
+              <img src="${logo}" alt="${row.empresa}" style="max-width: 100%; max-height: 100px; object-fit: contain;">
+            </div>
+          ` : `
+            <div style="background: linear-gradient(135deg, var(--puerto-blue), var(--puerto-dark-blue)); padding: 2rem; text-align: center;">
+              <div style="color: white; font-size: 1.5rem; font-weight: bold;">${row.empresa}</div>
+            </div>
+          `}
+          <div style="padding: 1.5rem;">
+            <div style="margin-bottom: 1rem;">
+              <div style="color: var(--puerto-blue); font-weight: bold; font-size: 1.25rem; margin-bottom: 0.5rem;">
+                ${row.puesto}
+              </div>
+              <div style="color: var(--text-secondary); font-size: 0.9rem;">Puesto asignado</div>
+            </div>
+
+            <div style="display: grid; gap: 0.75rem;">
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <svg xmlns="http://www.w3.org/2000/svg" style="width: 20px; height: 20px; color: var(--puerto-blue);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div>
+                  <div style="font-size: 0.85rem; color: var(--text-secondary);">Jornada</div>
+                  <div style="font-weight: 600;">${row.jornada}</div>
+                </div>
+              </div>
+
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <svg xmlns="http://www.w3.org/2000/svg" style="width: 20px; height: 20px; color: var(--puerto-green);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div>
+                  <div style="font-size: 0.85rem; color: var(--text-secondary);">Buque</div>
+                  <div style="font-weight: 600;">${row.buque}</div>
+                </div>
+              </div>
+
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <svg xmlns="http://www.w3.org/2000/svg" style="width: 20px; height: 20px; color: var(--puerto-orange);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                <div>
+                  <div style="font-size: 0.85rem; color: var(--text-secondary);">Parte</div>
+                  <div style="font-weight: 600;">${row.parte}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+
+        // Efecto hover
+        card.addEventListener('mouseenter', () => {
+          card.style.transform = 'translateY(-4px)';
+          card.style.boxShadow = '0 8px 24px rgba(0,0,0,0.12)';
+        });
+        card.addEventListener('mouseleave', () => {
+          card.style.transform = 'translateY(0)';
+          card.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
+        });
+
+        cardsContainer.appendChild(card);
+      });
+
+      container.appendChild(cardsContainer);
+    });
 
   } catch (error) {
     loading.classList.add('hidden');
@@ -929,79 +960,46 @@ function createQuincenaCard(year, month, quincena, jornales) {
   // Crear card
   const card = document.createElement('div');
   card.className = 'quincena-card';
-  card.style.marginBottom = '1.5rem';
+  card.style.marginBottom = '0.75rem';
   card.style.border = '1px solid var(--border-color)';
-  card.style.borderRadius = '12px';
+  card.style.borderRadius = '8px';
   card.style.overflow = 'hidden';
   card.style.background = 'white';
 
-  // Header (clickable para expandir/colapsar)
+  // Emoji de calendario según quincena
+  const emojiCalendario = quincena === 1 ? '📅' : '🗓️';
+
+  // Formato de mes en 3 letras mayúsculas
+  const monthShort = monthName.substring(0, 3).toUpperCase();
+
+  // Header simple - una sola línea con la información de la quincena
   const header = document.createElement('div');
   header.className = 'quincena-header';
-  header.style.padding = '1.25rem';
-  header.style.background = 'linear-gradient(135deg, var(--puerto-blue), var(--puerto-dark-blue))';
-  header.style.color = 'white';
+  header.style.padding = '1rem 1.25rem';
+  header.style.background = 'white';
   header.style.cursor = 'pointer';
   header.style.userSelect = 'none';
-  header.style.position = 'relative';
-  header.style.transition = 'all 0.3s ease';
+  header.style.transition = 'all 0.2s ease';
+  header.style.display = 'flex';
+  header.style.alignItems = 'center';
+  header.style.gap = '0.75rem';
+  header.style.borderBottom = '1px solid var(--border-color)';
 
   header.innerHTML = `
-    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
-      <div style="flex: 1; min-width: 200px;">
-        <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem; flex-wrap: wrap;">
-          <div style="font-size: 1.25rem; font-weight: bold;">
-            📅 ${monthName} ${year} - Quincena ${quincena}
-          </div>
-          <span style="background: rgba(255,255,255,0.25); backdrop-filter: blur(10px); padding: 0.35rem 0.75rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; border: 1px solid rgba(255,255,255,0.3); box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-            👆 Click para expandir
-          </span>
-        </div>
-        <div style="opacity: 0.9; font-size: 0.9rem;">
-          Del ${rangoInicio} al ${rangoFin} de ${monthName} • ${totalJornales} jornales registrados
-        </div>
-      </div>
-      <div style="display: flex; gap: 1.5rem; align-items: center;">
-        <div style="text-align: center; background: rgba(255,255,255,0.15); padding: 0.75rem 1.25rem; border-radius: 12px; min-width: 80px;">
-          <div style="font-size: 2rem; font-weight: bold;">${totalJornales}</div>
-          <div style="font-size: 0.75rem; opacity: 0.9; text-transform: uppercase; letter-spacing: 0.5px;">Jornales</div>
-        </div>
-        <div style="background: rgba(255,255,255,0.2); border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
-          <svg class="expand-icon" xmlns="http://www.w3.org/2000/svg" style="width: 24px; height: 24px; transition: transform 0.3s; flex-shrink: 0;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-          </svg>
-        </div>
-      </div>
-    </div>
-  `;
-
-  // Agregar indicador de desplegable más visible debajo del header
-  const indicador = document.createElement('div');
-  indicador.style.padding = '0.75rem 1.25rem';
-  indicador.style.background = 'white';
-  indicador.style.borderBottom = '1px solid var(--border-color)';
-  indicador.style.fontSize = '0.85rem';
-  indicador.style.color = '#000';
-  indicador.style.fontWeight = '600';
-  indicador.style.display = 'flex';
-  indicador.style.alignItems = 'center';
-  indicador.style.gap = '0.5rem';
-  indicador.style.cursor = 'pointer';
-  indicador.innerHTML = `
-    <svg xmlns="http://www.w3.org/2000/svg" style="width: 16px; height: 16px; flex-shrink: 0;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+    <span style="font-size: 1.3rem;">${emojiCalendario}</span>
+    <span style="font-size: 1rem; font-weight: 600; color: #000;">${rangoInicio}-${rangoFin} ${monthShort}</span>
+    <span style="font-size: 0.85rem; color: #666; margin-left: 0.5rem;">${totalJornales} jornales</span>
+    <svg class="expand-icon" xmlns="http://www.w3.org/2000/svg" style="width: 20px; height: 20px; margin-left: auto; transition: transform 0.3s; flex-shrink: 0;" fill="none" viewBox="0 0 24 24" stroke="#666" stroke-width="2">
       <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
     </svg>
-    <span>Haz click arriba para ver el detalle completo de esta quincena</span>
   `;
 
   // Efectos hover para hacer más obvio que es clickeable
   header.addEventListener('mouseenter', () => {
-    header.style.transform = 'scale(1.01)';
-    header.style.boxShadow = '0 4px 20px rgba(0,0,0,0.15)';
+    header.style.background = 'var(--bg-secondary)';
   });
   header.addEventListener('mouseleave', () => {
-    header.style.transform = 'scale(1)';
-    header.style.boxShadow = 'none';
+    header.style.background = 'white';
   });
 
   // Body (inicialmente oculto)
@@ -1079,35 +1077,15 @@ function createQuincenaCard(year, month, quincena, jornales) {
     </div>
   `;
 
-  // Función para toggle expand/collapse
-  const toggleExpand = () => {
+  // Click handler para toggle expand/collapse
+  header.addEventListener('click', () => {
     const isExpanded = body.style.display !== 'none';
     body.style.display = isExpanded ? 'none' : 'block';
-    indicador.style.display = isExpanded ? 'flex' : 'none';
     const icon = header.querySelector('.expand-icon');
     icon.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(180deg)';
-    const indicadorIcon = indicador.querySelector('svg');
-    if (indicadorIcon) {
-      indicadorIcon.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(180deg)';
-    }
-  };
-
-  // Click handler para header
-  header.addEventListener('click', toggleExpand);
-
-  // Click handler para indicador
-  indicador.addEventListener('click', toggleExpand);
-
-  // Hover effect para indicador
-  indicador.addEventListener('mouseenter', () => {
-    indicador.style.background = 'var(--bg-secondary)';
-  });
-  indicador.addEventListener('mouseleave', () => {
-    indicador.style.background = 'white';
   });
 
   card.appendChild(header);
-  card.appendChild(indicador);
   card.appendChild(body);
 
   return card;
@@ -1230,25 +1208,34 @@ async function loadPuertas() {
       const table = document.createElement('table');
       table.style.width = '100%';
 
-      // Header de la tabla
+      // Header de la tabla con 3 columnas
       table.innerHTML = `
         <thead>
           <tr>
             <th style="text-align: left; padding: 1rem; background: var(--puerto-blue); color: white;">Jornada</th>
-            <th style="text-align: center; padding: 1rem; background: var(--puerto-blue); color: white;">Puerta</th>
+            <th style="text-align: center; padding: 1rem; background: var(--puerto-blue); color: white;">Puerta SP</th>
+            <th style="text-align: center; padding: 1rem; background: var(--puerto-blue); color: white;">Puerta OC</th>
           </tr>
         </thead>
         <tbody>
           ${puertasLaborables.map(item => {
-            const puerta = item.puertaSP || item.puertaOC || '';
-            const isEmpty = !puerta || puerta.trim() === '';
+            const puertaSP = item.puertaSP || '';
+            const puertaOC = item.puertaOC || '';
+            const isEmptySP = !puertaSP || puertaSP.trim() === '';
+            const isEmptyOC = !puertaOC || puertaOC.trim() === '';
             return `
               <tr style="border-bottom: 1px solid var(--border-color);">
                 <td style="padding: 1rem; font-weight: 600; color: var(--puerto-dark-blue);">${item.jornada}</td>
                 <td style="padding: 1rem; text-align: center;">
-                  ${isEmpty
+                  ${isEmptySP
                     ? '<span style="color: var(--puerto-red); font-weight: 600;">— No contratada</span>'
-                    : `<span style="background: linear-gradient(135deg, var(--puerto-green), #059669); color: white; padding: 0.5rem 1.5rem; border-radius: 8px; font-weight: bold; font-size: 1.1rem; display: inline-block; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);">${puerta}</span>`
+                    : `<span style="background: linear-gradient(135deg, var(--puerto-green), #059669); color: white; padding: 0.5rem 1.5rem; border-radius: 8px; font-weight: bold; font-size: 1.1rem; display: inline-block; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);">${puertaSP}</span>`
+                  }
+                </td>
+                <td style="padding: 1rem; text-align: center;">
+                  ${isEmptyOC
+                    ? '<span style="color: var(--puerto-red); font-weight: 600;">— No contratada</span>'
+                    : `<span style="background: linear-gradient(135deg, var(--puerto-blue), #1e40af); color: white; padding: 0.5rem 1.5rem; border-radius: 8px; font-weight: bold; font-size: 1.1rem; display: inline-block; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);">${puertaOC}</span>`
                   }
                 </td>
               </tr>
@@ -1276,25 +1263,34 @@ async function loadPuertas() {
       const table = document.createElement('table');
       table.style.width = '100%';
 
-      // Header de la tabla
+      // Header de la tabla con 3 columnas
       table.innerHTML = `
         <thead>
           <tr>
             <th style="text-align: left; padding: 1rem; background: var(--puerto-orange); color: white;">Jornada</th>
-            <th style="text-align: center; padding: 1rem; background: var(--puerto-orange); color: white;">Puerta</th>
+            <th style="text-align: center; padding: 1rem; background: var(--puerto-orange); color: white;">Puerta SP</th>
+            <th style="text-align: center; padding: 1rem; background: var(--puerto-orange); color: white;">Puerta OC</th>
           </tr>
         </thead>
         <tbody>
           ${puertasFestivas.map(item => {
-            const puerta = item.puertaSP || item.puertaOC || '';
-            const isEmpty = !puerta || puerta.trim() === '';
+            const puertaSP = item.puertaSP || '';
+            const puertaOC = item.puertaOC || '';
+            const isEmptySP = !puertaSP || puertaSP.trim() === '';
+            const isEmptyOC = !puertaOC || puertaOC.trim() === '';
             return `
               <tr style="border-bottom: 1px solid var(--border-color);">
                 <td style="padding: 1rem; font-weight: 600; color: var(--puerto-dark-blue);">${item.jornada}</td>
                 <td style="padding: 1rem; text-align: center;">
-                  ${isEmpty
+                  ${isEmptySP
                     ? '<span style="color: var(--puerto-red); font-weight: 600;">— No contratada</span>'
-                    : `<span style="background: linear-gradient(135deg, var(--puerto-orange), #ea580c); color: white; padding: 0.5rem 1.5rem; border-radius: 8px; font-weight: bold; font-size: 1.1rem; display: inline-block; box-shadow: 0 2px 8px rgba(249, 115, 22, 0.3);">${puerta}</span>`
+                    : `<span style="background: linear-gradient(135deg, var(--puerto-orange), #ea580c); color: white; padding: 0.5rem 1.5rem; border-radius: 8px; font-weight: bold; font-size: 1.1rem; display: inline-block; box-shadow: 0 2px 8px rgba(249, 115, 22, 0.3);">${puertaSP}</span>`
+                  }
+                </td>
+                <td style="padding: 1rem; text-align: center;">
+                  ${isEmptyOC
+                    ? '<span style="color: var(--puerto-red); font-weight: 600;">— No contratada</span>'
+                    : `<span style="background: linear-gradient(135deg, var(--puerto-blue), #1e40af); color: white; padding: 0.5rem 1.5rem; border-radius: 8px; font-weight: bold; font-size: 1.1rem; display: inline-block; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);">${puertaOC}</span>`
                   }
                 </td>
               </tr>
@@ -1335,13 +1331,80 @@ async function loadCenso() {
 
     loading.classList.add('hidden');
 
+    // Calcular estadísticas por color
+    const colorStats = {
+      green: 0,
+      blue: 0,
+      yellow: 0,
+      orange: 0,
+      red: 0
+    };
+
+    data.forEach(item => {
+      if (colorStats.hasOwnProperty(item.color)) {
+        colorStats[item.color]++;
+      }
+    });
+
+    const total = data.length;
+
+    // Crear contenedor de estadísticas
+    const statsContainer = document.createElement('div');
+    statsContainer.style.display = 'grid';
+    statsContainer.style.gridTemplateColumns = 'repeat(auto-fit, minmax(100px, 1fr))';
+    statsContainer.style.gap = '1rem';
+    statsContainer.style.marginBottom = '2rem';
+    statsContainer.style.maxWidth = '600px';
+    statsContainer.style.margin = '0 auto 2rem auto';
+
+    // Colores y nombres
+    const colorInfo = [
+      { key: 'green', name: 'Verde', gradient: 'linear-gradient(135deg, #10b981, #059669)' },
+      { key: 'blue', name: 'Azul', gradient: 'linear-gradient(135deg, #3b82f6, #2563eb)' },
+      { key: 'yellow', name: 'Amarillo', gradient: 'linear-gradient(135deg, #f59e0b, #d97706)' },
+      { key: 'orange', name: 'Naranja', gradient: 'linear-gradient(135deg, #f97316, #ea580c)' },
+      { key: 'red', name: 'Rojo', gradient: 'linear-gradient(135deg, #ef4444, #dc2626)' }
+    ];
+
+    colorInfo.forEach(color => {
+      const count = colorStats[color.key];
+      const percentage = total > 0 ? ((count / total) * 100).toFixed(1) : 0;
+
+      const statCard = document.createElement('div');
+      statCard.style.background = 'white';
+      statCard.style.border = '1px solid var(--border-color)';
+      statCard.style.borderRadius = '8px';
+      statCard.style.padding = '1rem';
+      statCard.style.textAlign = 'center';
+      statCard.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+
+      statCard.innerHTML = `
+        <div style="width: 60px; height: 60px; background: ${color.gradient}; border-radius: 8px; margin: 0 auto 0.75rem; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"></div>
+        <div style="font-size: 1.5rem; font-weight: bold; color: var(--text-primary); margin-bottom: 0.25rem;">${count}</div>
+        <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem;">${color.name}</div>
+        <div style="font-size: 0.75rem; font-weight: 600; color: var(--puerto-blue);">${percentage}%</div>
+      `;
+
+      statsContainer.appendChild(statCard);
+    });
+
+    container.appendChild(statsContainer);
+
+    // Crear wrapper para el grid de chapas
+    const chapasWrapper = document.createElement('div');
+    chapasWrapper.className = 'censo-grid';
+    chapasWrapper.style.marginTop = '2rem';
+
+    // Crear grid de chapas dentro del wrapper
     data.forEach(item => {
       const div = document.createElement('div');
       div.className = `censo-item ${item.color}`;
       div.textContent = item.chapa;
       div.title = `Chapa ${item.chapa}`;
-      container.appendChild(div);
+      chapasWrapper.appendChild(div);
     });
+
+    container.appendChild(chapasWrapper);
 
   } catch (error) {
     loading.classList.add('hidden');
@@ -1353,7 +1416,6 @@ async function loadCenso() {
     `;
   }
 }
-
 /**
  * Renderiza los enlaces
  */
@@ -1463,7 +1525,7 @@ async function actualizarCacheNombres() {
     });
 
     localStorage.setItem('usuarios_cache', JSON.stringify(usuariosCache));
-    console.log('✅ Cache de nombres actualizado');
+    console.log('âœ… Cache de nombres actualizado');
   } catch (error) {
     console.error('Error actualizando cache de nombres:', error);
   }
