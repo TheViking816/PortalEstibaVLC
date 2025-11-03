@@ -56,7 +56,6 @@ const NOTICIAS_DATA = [
     <ul style="list-style-type: disc; margin-left: 20px; margin-top: 10px;">
       <li style="margin-bottom: 5px;"><b>Sistema robusto de jornales:</b> Ahora los jornales se guardan automáticamente, sin necesidad de que entres a la app.</li>
       <li style="margin-bottom: 5px;"><b>Histórico permanente:</b> Todos tus jornales quedan guardados de forma permanente y segura.</li>
-      <li style="margin-bottom: 5px;"><b>Sin pérdida de datos:</b> Aunque no accedas a la app, tus asignaciones se guardarán automáticamente.</li>
       <li style="margin-bottom: 5px;"><b>Logos de empresas:</b> Los logos de APM, CSP, MSC, VTEU y ERSHIP ahora se visualizan correctamente en "Mi Contratación".</li>
       <li style="margin-bottom: 5px;"><b>Nuevos enlaces:</b> Añadidos "Previsión Demandas" y "Chapero CPE" en la sección Información.</li>
       <li><b>Contraseñas mejoradas:</b> Arreglado el bug en el cambio de contraseña.</li>
@@ -2064,5 +2063,6 @@ window.agregarContratacionesManual = function(contrataciones) {
 
   return { agregadas, total: historico.length };
 };
+
 
 
