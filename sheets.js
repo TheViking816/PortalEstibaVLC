@@ -1,6 +1,14 @@
 /**
  * Módulo de integración con Google Sheets
  * Gestiona la obtención y parseo de datos desde Google Sheets públicas
+ *
+ * --- ESTADO DE ROBUSTEZ (VERSIÓN "CENSO LIMPIO") ---
+ * - getCenso: ROBUSTO (Lee por cabeceras desde censo_limpio)
+ * - getPuertas: FRÁGIL (Depende de índices de columna)
+ * - getContrataciones: FRÁGIL (Depende de índices de columna)
+ * - getUsuarios: FRÁGIL (Depende de índices de columna)
+ * - getForoMensajes: FRÁGIL (Parser manual)
+ * - getJornales: ROBUSTO (Lee por cabeceras, pero app.js no lo usa para historial)
  */
 
 // Configuración de las hojas de Google Sheets
@@ -11,8 +19,10 @@ const SHEETS_CONFIG = {
   // GIDs de las diferentes pestañas
   GID_JORNALES: '1885242510',      // Pestaña: Mis Jornales
   GID_CONTRATACION: '1304645770',  // Pestaña: Contrata_Glide
-  GID_PUERTAS: '1650839211',       // Pestaña: Puertas
-  GID_CENSO: '0'                   // Pestaña: Censo (ajustar si es necesario)
+  GID_PUERTAS: '1650839211',       // Pestaña: Puertas (No se usa, getPuertas usa URL hardcodeada)
+  
+  // URL de la hoja "censo_limpio"
+  URL_CENSO_LIMPIO: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTcJ5Irxl93zwDqehuLW7-MsuVtphRDtmF8Rwp-yueqcAYRfgrTtEdKDwX8WKkJj1m0rVJc8AncGN_A/pub?gid=1216182924&single=true&output=csv'
 };
 
 /**
@@ -144,9 +154,7 @@ async function fetchSheetData(sheetId, gid, useCache = true) {
  */
 const SheetsAPI = {
   /**
-   * Obtiene las puertas desde CSV directo
-   * Basado en lógica n8n que funciona correctamente
-   * Formato: Jornada en columna índice 2, primera puerta en índice 3
+   * [FRÁGIL] Obtiene las puertas desde CSV directo
    */
   async getPuertas() {
     try {
@@ -155,7 +163,8 @@ const SheetsAPI = {
       const response = await fetch(puertasURL, {
         headers: {
           'Accept-Charset': 'utf-8'
-        }
+        },
+        cache: 'no-store' // Evitar caché del navegador para puertas
       });
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -267,15 +276,13 @@ const SheetsAPI = {
   },
 
   /**
-   * Obtiene las asignaciones/contrataciones desde CSV directo con formato PIVOTADO
-   * Basado en lógica n8n que funciona correctamente
-   * Formato: Fecha, Jornada, Empresa, Parte, Buque, T, TC, C1, B, E
+   * [FRÁGIL] Obtiene las asignaciones/contrataciones desde CSV directo con formato PIVOTADO
    */
   async getContrataciones(chapa = null) {
     try {
       const contratacionURL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSTtbkA94xqjf81lsR7bLKKtyES2YBDKs8J2T4UrSEan7e5Z_eaptShCA78R1wqUyYyASJxmHj3gDnY/pub?gid=1388412839&single=true&output=csv';
 
-      const response = await fetch(contratacionURL);
+      const response = await fetch(contratacionURL, { cache: 'no-store' }); // Evitar caché
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -405,110 +412,98 @@ const SheetsAPI = {
   },
 
   /**
-   * Obtiene el censo de disponibilidad
-   * Formato del CSV: cada chapa son 3 valores consecutivos
-   * [posición, número_chapa, color_código]
-   * Color: 4=verde, 3=azul, 2=amarillo, 1=naranja, 0=rojo
+   * [ROBUSTO] Obtiene el censo de disponibilidad
+   * Formato del CSV: lee la URL del censo limpio y parsea usando cabeceras.
+   * Cabeceras esperadas: posicion, chapa, color
    */
   async getCenso() {
-    try {
-      // URL directa al CSV del censo
-      const censoURL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTrMuapybwZUEGPR1vsP9p1_nlWvznyl0sPD4xWsNJ7HdXCj1ABY1EpU1um538HHZQyJtoAe5Niwrxq/pub?gid=841547354&single=true&output=csv';
+    // Clave de caché única para esta función
+    const cacheKey = 'censo_limpio_data';
+    const cacheTimeKey = 'censo_limpio_time';
+    const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
 
-      const response = await fetch(censoURL);
+    // 1. Verificar cache
+    const cached = localStorage.getItem(cacheKey);
+    const cacheTime = localStorage.getItem(cacheTimeKey);
+    if (cached && cacheTime) {
+      const age = Date.now() - parseInt(cacheTime);
+      if (age < CACHE_DURATION) {
+        console.log('Usando censo desde caché');
+        return JSON.parse(cached);
+      }
+    }
+
+    try {
+      console.log('Obteniendo censo desde la nueva URL...');
+      // 2. Obtener el texto CSV
+      const response = await fetch(SHEETS_CONFIG.URL_CENSO_LIMPIO, {
+        cache: 'no-store' // No cachear esta petición
+      });
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
+      
+      const buffer = await response.arrayBuffer();
+      const decoder = new TextDecoder('utf-8');
+      const csvText = decoder.decode(buffer);
 
-      const csvText = await response.text();
+      // 3. Parsear el CSV usando la función robusta
+      const data = parseCSV(csvText);
+      
+      // 4. Mapear y limpiar los datos
+      const censoItems = data.map(item => {
+        // Mapear código de color a nombre
+        let colorName;
+        // Limpiar el valor de color de '\r'
+        const colorVal = item.color ? item.color.replace(/\r/g, '') : '';
+        const colorNum = parseInt(colorVal);
 
-      console.log('=== CENSO CSV RAW (primeros 200 chars) ===');
-      console.log(csvText.substring(0, 200));
-
-      // Parsear CSV y obtener todos los valores, eliminando vacíos
-      const allValues = csvText
-        .split(/[\n,]/)  // Dividir por saltos de línea Y comas
-        .map(v => v.trim().replace(/"/g, ''))  // Limpiar
-        .filter(v => v !== '');  // Eliminar valores vacíos
-
-      console.log('Total de valores en censo:', allValues.length);
-      console.log('Primeros 15 valores:', allValues.slice(0, 15));
-
-      // Agrupar valores de 3 en 3: [posición, chapa, color]
-      const censoItems = [];
-
-      for (let i = 0; i < allValues.length; i += 3) {
-        // Verificar que tenemos los 3 valores
-        if (i + 2 >= allValues.length) break;
-
-        const posicionStr = allValues[i];      // índice i = posición
-        const chapaStr = allValues[i + 1];     // índice i+1 = CHAPA (esto es lo que queremos mostrar)
-        const colorStr = allValues[i + 2];     // índice i+2 = código de color
-
-        // Validar que sean números válidos
-        const posNum = parseInt(posicionStr);
-        const chapaNum = parseInt(chapaStr);
-        const colorNum = parseInt(colorStr);
-
-        // Debug: ver qué estamos parseando
-        if (i < 30) { // Solo para los primeros 10 items
-          console.log(`Triplete ${i/3}: pos=${posicionStr}(${posNum}), chapa=${chapaStr}(${chapaNum}), color=${colorStr}(${colorNum})`);
+        switch (colorNum) {
+          case 4: colorName = 'green'; break;
+          case 3: colorName = 'blue'; break;
+          case 2: colorName = 'yellow'; break;
+          case 1: colorName = 'orange'; break;
+          case 0: colorName = 'red'; break;
+          default: colorName = 'green'; // Fallback por si acaso
         }
 
-        if (!isNaN(posNum) && !isNaN(chapaNum) && !isNaN(colorNum)) {
-          // Validar rango de color (0-4)
-          if (colorNum >= 0 && colorNum <= 4) {
-            // IMPORTANTE: Las chapas válidas son números >= 50
-            // Posiciones son 1-535, chapas reales son como 702, 537, 918, etc.
-            // Si chapaNum es muy pequeño (< 50), probablemente sea un error
-            if (chapaNum < 50) {
-              console.warn(`Saltando chapa sospechosa: ${chapaNum} (posición: ${posNum})`);
-              continue;
-            }
+        return {
+          posicion: parseInt(item.posicion),
+          chapa: item.chapa, // Mantener como string
+          color: colorName
+        };
+      }).filter(item => item.chapa && item.color && !isNaN(item.posicion)); // Asegurar que los datos son válidos
 
-            // Mapear código de color a nombre
-            let color;
-            switch (colorNum) {
-              case 4: color = 'green'; break;     // Verde claro - Disponible
-              case 3: color = 'blue'; break;      // Azul claro - Limitado
-              case 2: color = 'yellow'; break;    // Amarillo - Pendiente
-              case 1: color = 'orange'; break;    // Naranja - Restricción
-              case 0: color = 'red'; break;       // Rojo - No disponible
-              default: color = 'green'; break;
-            }
-
-            censoItems.push({
-              posicion: posNum,
-              chapa: chapaNum.toString(),  // ← IMPORTANTE: Usar chapaNum, NO posNum
-              color: color
-            });
-          }
-        }
-      }
-
-      console.log('=== CENSO PROCESADO ===');
+      console.log('=== CENSO PROCESADO (NUEVO MÉTODO) ===');
       console.log('Total de chapas:', censoItems.length);
-      console.log('Primeras 5 chapas con sus datos completos:', censoItems.slice(0, 5));
-      console.log('Últimas 5 chapas con sus datos completos:', censoItems.slice(-5));
+      
+      // 5. Guardar en caché
+      localStorage.setItem(cacheKey, JSON.stringify(censoItems));
+      localStorage.setItem(cacheTimeKey, Date.now().toString());
 
-      // Ordenar por posición ascendente (1 a 535)
-      censoItems.sort((a, b) => a.posicion - b.posicion);
-
-      // Retornar con posición, chapa y color
       return censoItems;
 
     } catch (error) {
-      console.error('Error obteniendo censo:', error);
-      return this.getMockCenso();
+      console.error('Error obteniendo censo (nuevo método):', error);
+      
+      // Intentar devolver caché expirado si falla
+      if (cached) {
+        console.warn('Usando censo de caché expirado por error');
+        return JSON.parse(cached);
+      }
+      
+      // Si no hay caché y falla, lanzar error
+      throw new Error('No se pudo cargar el censo.');
     }
   },
 
   /**
    * Obtiene la posición de una chapa específica en el censo
+   * (Actualizado para usar el nuevo getCenso)
    */
   async getPosicionChapa(chapa) {
     try {
-      const censo = await this.getCenso();
+      const censo = await this.getCenso(); // Llama a la nueva función
       const item = censo.find(c => c.chapa === chapa);
       return item ? item.posicion : null;
     } catch (error) {
@@ -519,11 +514,7 @@ const SheetsAPI = {
 
   /**
    * Calcula posiciones hasta contratación
-   * Hay dos censos separados:
-   * - Censo SP: posiciones 1-449
-   * - Censo OC: posiciones 450-535
-   * @param {string} chapa - Chapa del usuario
-   * @returns {number|null} - Número de posiciones hasta contratación o null si no se puede calcular
+   * (Actualizado para usar el nuevo getPosicionChapa y el nuevo getPuertas)
    */
   async getPosicionesHastaContratacion(chapa) {
     try {
@@ -541,14 +532,15 @@ const SheetsAPI = {
       const esUsuarioSP = posicionUsuario <= LIMITE_SP;
 
       // Obtener puertas
-      const puertas = await this.getPuertas();
+      const puertasResult = await this.getPuertas();
+      const puertas = puertasResult.puertas; 
 
       // Separar puertas SP y OC
-      const puertasSP = puertas.puertas
+      const puertasSP = puertas
         .map(p => parseInt(p.puertaSP))
         .filter(n => !isNaN(n) && n > 0);
 
-      const puertasOC = puertas.puertas
+      const puertasOC = puertas
         .map(p => parseInt(p.puertaOC))
         .filter(n => !isNaN(n) && n > 0);
 
@@ -598,17 +590,14 @@ const SheetsAPI = {
   },
 
   /**
-   * Obtiene mensajes del foro desde Google Sheet
-   * Estructura CSV: Timestamp (col A), Chapa (col B), Texto (col C)
-   * Pestaña "foro" - GID: 464918425
-   * URL completa: https://docs.google.com/spreadsheets/d/1j-IaOHXoLEP4bK2hjdn2uAYy8a2chqiQSOw4Nfxoyxc/edit?gid=464918425
+   * [FRÁGIL] Obtiene mensajes del foro desde Google Sheet
    */
   async getForoMensajes() {
     try {
       // URL del CSV del foro publicado
       const foroURL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTcJ5Irxl93zwDqehuLW7-MsuVtphRDtmF8Rwp-yueqcAYRfgrTtEdKDwX8WKkJj1m0rVJc8AncGN_A/pub?gid=464918425&single=true&output=csv';
 
-      const response = await fetch(foroURL);
+      const response = await fetch(foroURL, { cache: 'no-store' });
       if (!response.ok) {
         console.warn('⚠️ Foro sheet no disponible (HTTP ' + response.status + '). Asegúrate de publicar la pestaña "foro" como CSV en Archivo → Compartir → Publicar en la web');
         return null; // Fallback a localStorage
@@ -760,9 +749,7 @@ const SheetsAPI = {
   },
 
   /**
-   * Obtiene usuarios desde Google Sheet para validación de login
-   * Estructura CSV: Contraseña (columna A), Chapa (columna B), Nombre (columna C)
-   * URL: Sheet "usuarios"
+   * [FRÁGIL] Obtiene usuarios desde Google Sheet para validación de login
    */
   async getUsuarios() {
     try {
@@ -771,7 +758,8 @@ const SheetsAPI = {
       const response = await fetch(usuariosURL, {
         headers: {
           'Accept-Charset': 'utf-8'
-        }
+        },
+        cache: 'no-store' // No cachear usuarios
       });
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -849,11 +837,12 @@ const SheetsAPI = {
   },
 
   /**
-   * Obtiene TODOS los jornales de un estibador
-   * Estructura: Fecha, Chapa, Puesto, Jornada, Empresa, Buque, Parte
+   * [ROBUSTO] Obtiene TODOS los jornales de un estibador (Para el historial)
+   * Esta función lee de la pestaña GID_JORNALES
    */
   async getJornales(chapa) {
     try {
+      // Usa fetchSheetData, que es robusto y lee cabeceras
       const data = await fetchSheetData(SHEETS_CONFIG.SHEET_ID, SHEETS_CONFIG.GID_JORNALES);
 
       // Filtrar TODOS los registros por chapa
@@ -861,6 +850,7 @@ const SheetsAPI = {
         const rowChapa = (row.Chapa || row.chapa || '').toString().trim();
         return rowChapa === chapa.toString().trim();
       }).map(row => ({
+        // Mapea usando los nombres de cabecera esperados
         fecha: row.Fecha || row.fecha || '',
         puesto: row.Puesto || row.puesto || '',
         jornada: row.Jornada || row.jornada || '',
@@ -917,18 +907,8 @@ const SheetsAPI = {
    * Datos mock para censo (fallback)
    */
   getMockCenso() {
-    return [
-      { chapa: '702', color: 'green' }, { chapa: '51', color: 'red' }, { chapa: '160', color: 'red' },
-      { chapa: '101', color: 'green' }, { chapa: '475', color: 'green' }, { chapa: '537', color: 'green' },
-      { chapa: '52', color: 'orange' }, { chapa: '164', color: 'red' }, { chapa: '115', color: 'green' },
-      { chapa: '151', color: 'green' }, { chapa: '918', color: 'green' }, { chapa: '103', color: 'yellow' },
-      { chapa: '995', color: 'green' }, { chapa: '152', color: 'green' }, { chapa: '465', color: 'green' },
-      { chapa: '667', color: 'green' }, { chapa: '54', color: 'red' }, { chapa: '434', color: 'green' },
-      { chapa: '104', color: 'yellow' }, { chapa: '742', color: 'green' }, { chapa: '221', color: 'green' },
-      { chapa: '330', color: 'green' }, { chapa: '190', color: 'green' }, { chapa: '604', color: 'green' },
-      { chapa: '123', color: 'green' }, { chapa: '456', color: 'yellow' }, { chapa: '789', color: 'red' },
-      { chapa: '234', color: 'green' }, { chapa: '567', color: 'green' }, { chapa: '890', color: 'orange' }
-    ];
+    console.error("--- ERROR: NO SE PUDO CARGAR CENSO, MOCK DESHABILITADO ---");
+    throw new Error("El mock de Censo está deshabilitado. La carga real falló.");
   },
 
   /**
@@ -951,7 +931,7 @@ const SheetsAPI = {
 function clearSheetsCache() {
   const keys = Object.keys(localStorage);
   keys.forEach(key => {
-    if (key.startsWith('sheet_')) {
+    if (key.startsWith('sheet_') || key.startsWith('censo_limpio_data')) {
       localStorage.removeItem(key);
     }
   });
