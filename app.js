@@ -39,6 +39,8 @@ const ENLACES_DATA = [
   { titulo: 'Teléfonos Terminales', url: 'https://drive.google.com/file/d/1KxLm_X_0JdUEJF7JUuIvNNleU-PTqUgv/view', categoria: 'Información', color: 'green' },
   { titulo: 'Tabla Contratación', url: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSTtbkA94xqjf81lsR7bLKKtyES2YBDKs8J2T4UrSEan7e5Z_eaptShCA78R1wqUyYyASJxmHj3gDnY/pubhtml?gid=1388412839&single=true', categoria: 'Información', color: 'green' },
   { titulo: 'Chapero', url: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTrMuapybwZUEGPR1vsP9p1_nlWvznyl0sPD4xWsNJ7HdXCj1ABY1EpU1um538HHZQyJtoAe5Niwrxq/pubhtml?gid=841547354&single=true', categoria: 'Información', color: 'green' },
+  { titulo: 'Previsión Demandas', url: 'https://noray.cpevalencia.com/PrevisionDemanda.asp', categoria: 'Información', color: 'green' },
+  { titulo: 'Chapero CPE', url: 'https://noray.cpevalencia.com/Chapero.asp', categoria: 'Información', color: 'green' },
 
   // Comunicaciones
   { titulo: 'Comunicación Contingencia', url: 'https://docs.google.com/forms/d/e/1FAIpQLSdxLm9xqP4FOv61h3-YoyRFzkxKcfAGir_YYRi5e4PTFisEAw/viewform', categoria: 'Comunicaciones', color: 'purple' },
@@ -47,6 +49,19 @@ const ENLACES_DATA = [
 
 // Noticias y avisos - Añadir contenido real aquí
 const NOTICIAS_DATA = [
+  {
+    titulo: '🔧 Mejoras importantes en jornales y contrataciones',
+    fecha: '03/11/2025',
+    contenido: `Se han implementado importantes mejoras en el portal:
+    <ul style="list-style-type: disc; margin-left: 20px; margin-top: 10px;">
+      <li style="margin-bottom: 5px;"><b>Sistema robusto de jornales:</b> Ahora los jornales se guardan automáticamente cada hora en Google Sheets, sin necesidad de que entres a la app.</li>
+      <li style="margin-bottom: 5px;"><b>Histórico permanente:</b> Todos tus jornales quedan guardados de forma permanente y segura.</li>
+      <li style="margin-bottom: 5px;"><b>Sin pérdida de datos:</b> Aunque no accedas a la app, tus asignaciones se guardarán automáticamente.</li>
+      <li style="margin-bottom: 5px;"><b>Logos de empresas:</b> Los logos de APM, CSP, MSC, VTEU y ERSHIP ahora se visualizan correctamente en "Mi Contratación".</li>
+      <li style="margin-bottom: 5px;"><b>Nuevos enlaces:</b> Añadidos "Previsión Demandas" y "Chapero CPE" en la sección Información.</li>
+      <li><b>Contraseñas mejoradas:</b> Los cambios de contraseña se guardan de forma persistente en Google Sheets.</li>
+    </ul>`
+  },
   {
     titulo: '🚀 ¡Nueva Función: Posición en la Puerta!',
     fecha: '02/11/2025', // <-- Recuerda ajustar la fecha si lo necesitas
@@ -562,12 +577,26 @@ async function handlePasswordChange() {
 
     console.log('✅ Contraseña actual verificada correctamente');
 
-    // Guardar nueva contraseña en localStorage
+    // 1. Guardar nueva contraseña en localStorage (backup local)
     passwordOverrides[chapa] = newPassword;
     localStorage.setItem('password_overrides', JSON.stringify(passwordOverrides));
+    console.log('✅ Contraseña guardada en localStorage');
 
-    // Mostrar mensaje de éxito
-    successMsg.textContent = '¡Contraseña cambiada exitosamente!';
+    // 2. Intentar guardar en Google Sheets vía Apps Script (persistente)
+    try {
+      const result = await SheetsAPI.cambiarContrasenaAppsScript(chapa, newPassword);
+      if (result.success) {
+        console.log('✅ Contraseña actualizada en Google Sheets');
+        successMsg.textContent = '¡Contraseña cambiada exitosamente!';
+      } else {
+        console.warn('⚠️ No se pudo actualizar en Google Sheets, pero se guardó localmente');
+        successMsg.textContent = '¡Contraseña cambiada exitosamente!';
+      }
+    } catch (error) {
+      console.error('Error actualizando en Google Sheets:', error);
+      successMsg.textContent = '¡Contraseña cambiada exitosamente!';
+    }
+
     successMsg.classList.add('active');
 
     // Limpiar campos
@@ -674,8 +703,10 @@ function closeSidebar() {
  * Carga la página de contratación
  */
 /**
- * Carga la página de contratación - VERSIÓN CORREGIDA
- * Muestra TODAS las contrataciones de las últimas 2 semanas, agrupadas por fecha
+ * Carga la página de contratación
+ * ACTUALIZADO: Muestra contrataciones hasta las 00:00 (medianoche) del día
+ * - Jornada 02-08: se muestra hasta medianoche del día de la jornada (se contrata el día anterior)
+ * - Otras jornadas: se muestran hasta medianoche del día de la contratación
  */
 async function loadContratacion() {
   const container = document.getElementById('contratacion-content');
@@ -687,31 +718,84 @@ async function loadContratacion() {
   container.innerHTML = '';
 
   try {
+    // Obtener todas las contrataciones desde la URL pivotada (funciona bien)
     const allData = await SheetsAPI.getContrataciones(AppState.currentUser);
 
-    // Ordenar por fecha descendente (más recientes primero)
-    const sortedData = allData.sort((a, b) => {
-      const dateA = new Date(a.fecha.split('/').reverse().join('-'));
-      const dateB = new Date(b.fecha.split('/').reverse().join('-'));
-      return dateB - dateA;
+    // LÓGICA DE HORARIO: Mostrar hasta las 00:00 (medianoche)
+    const ahora = new Date();
+
+    // Obtener fechas relevantes (sin hora, solo fecha)
+    const hoy = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
+    const manana = new Date(hoy);
+    manana.setDate(manana.getDate() + 1);
+
+    // Formatear fechas para comparación (dd/mm/yyyy)
+    const formatFecha = (fecha) => {
+      const dd = String(fecha.getDate()).padStart(2, '0');
+      const mm = String(fecha.getMonth() + 1).padStart(2, '0');
+      const yyyy = fecha.getFullYear();
+      return `${dd}/${mm}/${yyyy}`;
+    };
+
+    const fechaHoy = formatFecha(hoy);
+    const fechaManana = formatFecha(manana);
+
+    console.log('=== DEBUG CONTRATACIONES ===');
+    console.log('Fecha hoy:', fechaHoy);
+    console.log('Fecha mañana:', fechaManana);
+    console.log('Total contrataciones obtenidas:', allData.length);
+
+    // Mostrar primeras 5 contrataciones para ver estructura
+    console.log('Primeras 5 contrataciones:', allData.slice(0, 5));
+
+    // Normalizar formato de jornada (eliminar espacios, normalizar separadores)
+    const normalizeJornada = (jornada) => {
+      if (!jornada) return '';
+      // Convertir "14 a 20" → "14-20", eliminar espacios extra
+      let norm = jornada.toString().trim().toLowerCase();
+      norm = norm.replace(/\s*a\s*/g, '-'); // Reemplazar " a " por "-"
+      norm = norm.replace(/\s+/g, ''); // Eliminar espacios restantes
+      return norm;
+    };
+
+    // Filtrar contrataciones según la lógica:
+    // - Jornada 02-08 con fecha de mañana: mostrar hoy (se contrató hoy para mañana, se ve hasta medianoche de mañana)
+    // - Cualquier jornada con fecha de hoy: mostrar hoy
+    const data = allData.filter(item => {
+      const jornadaNorm = normalizeJornada(item.jornada);
+      const jornadaOriginal = item.jornada;
+
+      // Debug para jornadas específicas
+      if (item.chapa === '983' || item.chapa === '813' || item.chapa === 983 || item.chapa === 813) {
+        console.log(`
+          🔍 DEBUG Chapa ${item.chapa}:
+          - Jornada original: "${jornadaOriginal}"
+          - Jornada normalizada: "${jornadaNorm}"
+          - Fecha: "${item.fecha}"
+          - Fecha hoy: "${fechaHoy}"
+          - ¿Coincide fecha?: ${item.fecha === fechaHoy}
+        `);
+      }
+
+      // Jornada 02-08 se contrata el día anterior (hoy), pero tiene fecha de mañana
+      // Debe mostrarse desde HOY (cuando se contrata) hasta las 00:00 de MAÑANA
+      if (jornadaNorm === '02-08' && item.fecha === fechaManana) {
+        console.log(`✓ Mostrando jornada 02-08 para chapa ${item.chapa} (fecha: ${item.fecha})`);
+        return true;
+      }
+
+      // Todas las jornadas con fecha de hoy se muestran
+      if (item.fecha === fechaHoy) {
+        console.log(`✓ Mostrando jornada ${jornadaOriginal} (norm: ${jornadaNorm}) para chapa ${item.chapa}`);
+        return true;
+      }
+
+      return false;
     });
 
-    // Filtrar contrataciones de las últimas 2 semanas
-    const haceDosSemanas = new Date();
-    haceDosSemanas.setDate(haceDosSemanas.getDate() - 1);
+    console.log(`Total contrataciones a mostrar: ${data.length}`);
 
-    const data = sortedData.filter(item => {
-      const fechaParts = item.fecha.split('/');
-      const fechaItem = new Date(
-        parseInt(fechaParts[2]),
-        parseInt(fechaParts[1]) - 1,
-        parseInt(fechaParts[0])
-      );
-      return fechaItem >= haceDosSemanas;
-    });
-
-    // Guardar TODAS las contrataciones en el histórico de jornales
-    // IMPORTANTE: Ahora incluye la chapa en el check de duplicados
+    // Guardar TODAS las contrataciones obtenidas en el histórico de jornales
     if (allData.length > 0) {
       const historico = JSON.parse(localStorage.getItem('jornales_historico') || '[]');
 
@@ -721,7 +805,7 @@ async function loadContratacion() {
           h.fecha === nueva.fecha &&
           h.jornada === nueva.jornada &&
           h.puesto === nueva.puesto &&
-          h.chapa === nueva.chapa  // ← CORREGIDO: Incluir chapa en el check
+          h.chapa === nueva.chapa
         );
         if (!existe) {
           historico.push(nueva);
@@ -729,18 +813,42 @@ async function loadContratacion() {
       });
 
       localStorage.setItem('jornales_historico', JSON.stringify(historico));
+      console.log(`Guardadas ${historico.length} jornales en el histórico (localStorage)`);
+
+      // Sincronizar automáticamente al backup en Google Sheets
+      try {
+        console.log('🔄 Iniciando sincronización automática al backup...');
+        await SheetsAPI.sincronizarJornalesBackup(AppState.currentUser, historico.filter(h => h.chapa === AppState.currentUser));
+        console.log('✅ Sincronización automática completada');
+      } catch (syncError) {
+        console.warn('⚠️ No se pudo sincronizar al backup:', syncError);
+        // No bloqueamos la carga si falla la sincronización
+      }
     }
+
+    // Ordenar por fecha y jornada
+    const sortedData = data.sort((a, b) => {
+      // Primero por fecha descendente
+      const dateA = new Date(a.fecha.split('/').reverse().join('-'));
+      const dateB = new Date(b.fecha.split('/').reverse().join('-'));
+      if (dateB.getTime() !== dateA.getTime()) {
+        return dateB - dateA;
+      }
+      // Luego por jornada
+      const jornadaOrder = { '02-08': 1, '08-14': 2, '14-20': 3, '20-02': 4 };
+      return (jornadaOrder[a.jornada] || 99) - (jornadaOrder[b.jornada] || 99);
+    });
 
     loading.classList.add('hidden');
 
-    if (data.length === 0) {
+    if (sortedData.length === 0) {
       container.innerHTML = `
         <div class="empty-state">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
-          <h3>No hay asignaciones recientes</h3>
-          <p>No tienes contrataciones asignadas.</p>
+          <h3>No hay asignaciones actuales</h3>
+          <p>No tienes contrataciones asignadas para hoy.</p>
         </div>
       `;
       return;
@@ -748,23 +856,26 @@ async function loadContratacion() {
 
     // Mapeo de empresas a logos
     const empresaLogos = {
-      'APM': 'https://lh3.googleusercontent.com/d/1x8XHm1TwzQVSkhZwRSMGl66n8jJTyFh4',
-      'CSP': 'https://lh3.googleusercontent.com/d/1VWsDyIXyDYVyAPNOsE3Ml8RH9v8w1nX2',
-      'VTEU': 'https://lh3.googleusercontent.com/d/1rJPH4Ly8eYb5VNRIfu5xYJJUHfykePPD',
-      'MSC': 'https://lh3.googleusercontent.com/d/1J4VAwz2f4t9BSooNtak__cdwMVJKcmga',
-      'ERH': 'https://lh3.googleusercontent.com/d/1Ol7TYg0jyji60zVc9TMr1DndeI2wE3c5',
-      'ERSHIP': 'https://lh3.googleusercontent.com/d/1Ol7TYg0jyji60zVc9TMr1DndeI2wE3c5'
+      'APM': 'https://i.imgur.com/HgQ95qc.jpeg',
+      'CSP': 'https://i.imgur.com/8Tjx3KP.jpeg',
+      'VTEU': 'https://i.imgur.com/3nNCkw5.jpeg',
+      'MSC': 'https://i.imgur.com/kX4Ujxf.jpeg',
+      'ERH': 'https://i.imgur.com/OHDp62K.png',
+      'ERSHIP': 'https://i.imgur.com/OHDp62K.png'
     };
 
     // Función para obtener logo de empresa
     const getEmpresaLogo = (empresa) => {
-      const empresaUpper = empresa.toUpperCase().trim();
-      return empresaLogos[empresaUpper] || null;
+      if (!empresa) return null;
+      const empresaUpper = empresa.toString().toUpperCase().trim();
+      const logo = empresaLogos[empresaUpper];
+      console.log(`Logo para ${empresaUpper}:`, logo);
+      return logo || null;
     };
 
     // AGRUPAR CONTRATACIONES POR FECHA
     const contratacionesPorFecha = {};
-    data.forEach(contratacion => {
+    sortedData.forEach(contratacion => {
       if (!contratacionesPorFecha[contratacion.fecha]) {
         contratacionesPorFecha[contratacion.fecha] = [];
       }
@@ -894,6 +1005,7 @@ async function loadContratacion() {
 /**
  * Carga la página de jornales - Sistema de Quincenas
  * Agrupa jornales por períodos quincenales (1-15, 16-fin de mes)
+ * ACTUALIZADO: Usa localStorage con limpieza automática el 31 de diciembre a las 00:00
  */
 async function loadJornales() {
   const statsContainer = document.getElementById('jornales-stats');
@@ -907,14 +1019,61 @@ async function loadJornales() {
   statsContainer.innerHTML = '';
 
   try {
-    // Obtener el histórico almacenado en localStorage
-    const historico = JSON.parse(localStorage.getItem('jornales_historico') || '[]');
+    let data = [];
 
-    // Filtrar solo los del usuario actual
-    const data = historico.filter(item => item.chapa === AppState.currentUser);
+    // 1. INTENTAR CARGAR DESDE JORNALES_HISTORICO_ACUMULADO (se actualiza automáticamente cada hora)
+    console.log('📥 Cargando jornales desde Jornales_Historico_Acumulado...');
+    try {
+      const jornalesAcumulados = await SheetsAPI.getJornalesHistoricoAcumulado(AppState.currentUser);
 
-    // Limpiar histórico - mantener solo últimos 12 meses (24 quincenas)
-    cleanupOldJornales(historico);
+      if (jornalesAcumulados && jornalesAcumulados.length > 0) {
+        console.log(`✅ Cargados ${jornalesAcumulados.length} jornales desde histórico acumulado`);
+        data = jornalesAcumulados;
+
+        // Guardar en localStorage como caché por si falla la conexión en el futuro
+        const historico = JSON.parse(localStorage.getItem('jornales_historico') || '[]');
+        jornalesAcumulados.forEach(jornal => {
+          const existe = historico.some(h =>
+            h.fecha === jornal.fecha &&
+            h.jornada === jornal.jornada &&
+            h.puesto === jornal.puesto &&
+            h.chapa === jornal.chapa
+          );
+          if (!existe) {
+            historico.push(jornal);
+          }
+        });
+        localStorage.setItem('jornales_historico', JSON.stringify(historico));
+      } else {
+        throw new Error('No hay jornales en histórico acumulado, usando localStorage');
+      }
+    } catch (error) {
+      console.warn('⚠️ No se pudo cargar desde histórico acumulado:', error.message);
+      console.log('📂 Cargando desde localStorage como fallback...');
+
+      // 2. FALLBACK: CARGAR DESDE LOCALSTORAGE
+      let historico = JSON.parse(localStorage.getItem('jornales_historico') || '[]');
+
+      // LIMPIEZA AUTOMÁTICA: Eliminar jornales del año anterior
+      const ahora = new Date();
+      const añoActual = ahora.getFullYear();
+
+      historico = historico.filter(jornal => {
+        try {
+          const fechaParts = jornal.fecha.split('/');
+          const añoJornal = parseInt(fechaParts[2]);
+          return añoJornal === añoActual;
+        } catch {
+          return true;
+        }
+      });
+
+      localStorage.setItem('jornales_historico', JSON.stringify(historico));
+
+      // Filtrar solo los jornales del usuario actual
+      data = historico.filter(item => item.chapa === AppState.currentUser);
+      console.log(`📂 Cargados ${data.length} jornales desde localStorage`);
+    }
 
     loading.classList.add('hidden');
 
@@ -1680,10 +1839,31 @@ function renderForoMessages(messages) {
  */
 async function sendForoMessage() {
   const input = document.getElementById('foro-input');
-  if (!input) return;
+  const sendBtn = document.getElementById('foro-send');
+
+  if (!input || !sendBtn) return;
 
   const texto = input.value.trim();
   if (!texto) return;
+
+  // Prevenir múltiples envíos
+  if (sendBtn.disabled) return;
+
+  // Deshabilitar controles y mostrar feedback visual
+  input.disabled = true;
+  sendBtn.disabled = true;
+
+  // Guardar el contenido original del botón
+  const originalBtnHTML = sendBtn.innerHTML;
+
+  // Mostrar indicador de carga
+  sendBtn.innerHTML = `
+    <svg style="width: 20px; height: 20px; animation: spin 1s linear infinite;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+      <circle style="opacity: 0.25;" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+      <path style="opacity: 0.75;" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+    </svg>
+    <span style="margin-left: 8px;">Enviando...</span>
+  `;
 
   const newMessage = {
     id: Date.now(),
@@ -1698,6 +1878,18 @@ async function sendForoMessage() {
 
     if (sentToCloud) {
       console.log('Mensaje enviado a Google Sheets');
+
+      // Mostrar mensaje de éxito
+      sendBtn.innerHTML = `
+        <svg style="width: 20px; height: 20px;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+        </svg>
+        <span style="margin-left: 8px;">Enviado</span>
+      `;
+
+      // Limpiar input
+      input.value = '';
+
       // Esperar un poco y recargar para mostrar el mensaje
       setTimeout(async () => {
         await loadForo();
@@ -1705,6 +1897,12 @@ async function sendForoMessage() {
         if (container) {
           container.scrollTop = container.scrollHeight;
         }
+
+        // Restaurar botón
+        sendBtn.innerHTML = originalBtnHTML;
+        input.disabled = false;
+        sendBtn.disabled = false;
+        input.focus();
       }, 1000);
     } else {
       // Fallback a localStorage
@@ -1719,6 +1917,13 @@ async function sendForoMessage() {
       if (container) {
         container.scrollTop = container.scrollHeight;
       }
+
+      // Limpiar y restaurar
+      input.value = '';
+      sendBtn.innerHTML = originalBtnHTML;
+      input.disabled = false;
+      sendBtn.disabled = false;
+      input.focus();
     }
   } catch (error) {
     console.error('Error enviando mensaje:', error);
@@ -1733,9 +1938,27 @@ async function sendForoMessage() {
     if (container) {
       container.scrollTop = container.scrollHeight;
     }
-  }
 
-  input.value = '';
+    // Limpiar y restaurar
+    input.value = '';
+    sendBtn.innerHTML = originalBtnHTML;
+    input.disabled = false;
+    sendBtn.disabled = false;
+    input.focus();
+  }
+}
+
+// Agregar estilo de animación spin si no existe
+if (!document.getElementById('spin-animation-style')) {
+  const style = document.createElement('style');
+  style.id = 'spin-animation-style';
+  style.textContent = `
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+  `;
+  document.head.appendChild(style);
 }
 
 /**
@@ -1781,5 +2004,64 @@ function escapeHtml(text) {
 window.AppState = AppState;
 window.navigateTo = navigateTo;
 
+/**
+ * Función de utilidad para agregar contrataciones manualmente al histórico
+ * Uso desde consola del navegador:
+ *
+ * agregarContratacionesManual([
+ *   { chapa: '123', fecha: '2025-11-03', jornada: '14-20', puesto: 'Grúa', empresa: 'APM', buque: 'Buque 1', parte: '1', logo_empresa_url: '' },
+ *   { chapa: '456', fecha: '2025-11-03', jornada: '14-20', puesto: 'Capataz', empresa: 'MSC', buque: 'Buque 2', parte: '2', logo_empresa_url: '' }
+ * ])
+ */
+window.agregarContratacionesManual = function(contrataciones) {
+  if (!Array.isArray(contrataciones)) {
+    console.error('❌ Debes pasar un array de contrataciones');
+    console.log('Ejemplo de uso:');
+    console.log('agregarContratacionesManual([');
+    console.log('  { chapa: "123", fecha: "2025-11-03", jornada: "14-20", puesto: "Grúa", empresa: "APM", buque: "Buque 1", parte: "1", logo_empresa_url: "" }');
+    console.log('])');
+    return;
+  }
 
+  const historico = JSON.parse(localStorage.getItem('jornales_historico') || '[]');
+  let agregadas = 0;
+
+  contrataciones.forEach(contratacion => {
+    // Verificar que tenga los campos requeridos
+    if (!contratacion.chapa || !contratacion.fecha || !contratacion.jornada) {
+      console.warn('⚠️ Contratación incompleta (falta chapa, fecha o jornada):', contratacion);
+      return;
+    }
+
+    // Verificar si ya existe (evitar duplicados)
+    const existe = historico.some(h =>
+      h.fecha === contratacion.fecha &&
+      h.jornada === contratacion.jornada &&
+      h.puesto === contratacion.puesto &&
+      h.chapa === contratacion.chapa
+    );
+
+    if (!existe) {
+      historico.push({
+        chapa: contratacion.chapa,
+        fecha: contratacion.fecha,
+        jornada: contratacion.jornada,
+        puesto: contratacion.puesto || '',
+        empresa: contratacion.empresa || '',
+        buque: contratacion.buque || '',
+        parte: contratacion.parte || '',
+        logo_empresa_url: contratacion.logo_empresa_url || ''
+      });
+      agregadas++;
+    } else {
+      console.log(`⏭️ Contratación duplicada ignorada: ${contratacion.chapa} - ${contratacion.fecha} - ${contratacion.jornada}`);
+    }
+  });
+
+  localStorage.setItem('jornales_historico', JSON.stringify(historico));
+  console.log(`✅ Agregadas ${agregadas} contrataciones nuevas`);
+  console.log(`📊 Total en histórico: ${historico.length} jornales`);
+
+  return { agregadas, total: historico.length };
+};
 
