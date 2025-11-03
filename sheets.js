@@ -18,9 +18,11 @@ const SHEETS_CONFIG = {
 
   // GIDs de las diferentes pestañas
   GID_JORNALES: '1885242510',      // Pestaña: Mis Jornales
+  GID_JORNALES_HISTORICO: '418043978',  // Pestaña: Jornales_historico (NUEVA)
+  GID_JORNALES_HISTORICO_ACUMULADO: '1604874350',  // Pestaña: Jornales_Historico_Acumulado (HISTÓRICO ROBUSTO)
   GID_CONTRATACION: '1304645770',  // Pestaña: Contrata_Glide
   GID_PUERTAS: '1650839211',       // Pestaña: Puertas (No se usa, getPuertas usa URL hardcodeada)
-  
+
   // URL de la hoja "censo_limpio"
   URL_CENSO_LIMPIO: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTcJ5Irxl93zwDqehuLW7-MsuVtphRDtmF8Rwp-yueqcAYRfgrTtEdKDwX8WKkJj1m0rVJc8AncGN_A/pub?gid=1216182924&single=true&output=csv'
 };
@@ -719,10 +721,10 @@ const SheetsAPI = {
 
       // Si no está configurada en localStorage, usar la URL por defecto
       if (!appsScriptURL || appsScriptURL === '' || appsScriptURL === 'null') {
-        appsScriptURL = 'https://script.google.com/macros/s/AKfycbwL1lFFIbpq4evkRQ6W7MTfF6ywWgWaNad6mphwLHRbGkrbSXlB4eUOm-oaB50dcDnQ8g/exec';
+        appsScriptURL = 'https://script.google.com/macros/s/AKfycby7Cj08EDdVHXlzb1BKUXg0G5Zc_FuOMTp672U9_2K9tzgVy5p6q_sj4G8ctvHjR58hxg/exec';
         // Guardar en localStorage para futuros usos
         localStorage.setItem('foro_apps_script_url', appsScriptURL);
-        console.log('✅ URL del Apps Script del foro configurada automáticamente');
+        console.log('✅ URL del Apps Script configurada automáticamente');
       }
 
       const response = await fetch(appsScriptURL, {
@@ -745,6 +747,111 @@ const SheetsAPI = {
     } catch (error) {
       console.error('Error enviando mensaje al foro:', error);
       return false; // Fallback a localStorage
+    }
+  },
+
+  /**
+   * Cambia la contraseña de un usuario vía Apps Script
+   * Esto actualiza el Google Sheet directamente
+   */
+  async cambiarContrasenaAppsScript(chapa, nuevaContrasena) {
+    try {
+      // URL del Google Apps Script Web App
+      let appsScriptURL = localStorage.getItem('foro_apps_script_url');
+
+      if (!appsScriptURL || appsScriptURL === '' || appsScriptURL === 'null') {
+        appsScriptURL = 'https://script.google.com/macros/s/AKfycby7Cj08EDdVHXlzb1BKUXg0G5Zc_FuOMTp672U9_2K9tzgVy5p6q_sj4G8ctvHjR58hxg/exec';
+      }
+
+      console.log('🔐 Enviando cambio de contraseña a Apps Script...');
+
+      const response = await fetch(appsScriptURL, {
+        method: 'POST',
+        mode: 'no-cors', // Apps Script requiere no-cors
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'changePassword',
+          chapa: chapa,
+          newPassword: nuevaContrasena
+        })
+      });
+
+      console.log('✅ Contraseña actualizada en Google Sheets vía Apps Script');
+      return { success: true };
+
+    } catch (error) {
+      console.error('Error cambiando contraseña en Apps Script:', error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  /**
+   * Sincroniza jornales al backup en Google Sheets
+   * Envía todos los jornales de un usuario para guardarlos en Jornales_Historico
+   */
+  async sincronizarJornalesBackup(chapa, jornales) {
+    try {
+      let appsScriptURL = localStorage.getItem('foro_apps_script_url');
+
+      if (!appsScriptURL || appsScriptURL === '' || appsScriptURL === 'null') {
+        appsScriptURL = 'https://script.google.com/macros/s/AKfycby7Cj08EDdVHXlzb1BKUXg0G5Zc_FuOMTp672U9_2K9tzgVy5p6q_sj4G8ctvHjR58hxg/exec';
+      }
+
+      console.log(`📤 Sincronizando ${jornales.length} jornales al backup...`);
+
+      await fetch(appsScriptURL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'sincronizarJornales',
+          chapa: chapa,
+          jornales: jornales
+        })
+      });
+
+      console.log('✅ Jornales sincronizados al backup en Google Sheets');
+      return { success: true };
+
+    } catch (error) {
+      console.error('Error sincronizando jornales:', error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  /**
+   * Obtiene los jornales del backup en Google Sheets
+   * Lee desde la pestaña Jornales_Historico
+   */
+  async obtenerJornalesBackup(chapa) {
+    try {
+      // Usar la misma función que getJornalesHistorico
+      const data = await fetchSheetData(SHEETS_CONFIG.SHEET_ID, SHEETS_CONFIG.GID_JORNALES_HISTORICO);
+
+      // Filtrar por chapa
+      const jornalesChapa = data.filter(row => {
+        const rowChapa = (row.Chapa || row.chapa || '').toString().trim();
+        return rowChapa === chapa.toString().trim();
+      }).map(row => ({
+        chapa: row.Chapa || row.chapa || '',
+        fecha: row.Fecha || row.fecha || '',
+        puesto: row.Puesto || row.puesto || row.Puesto_Contratacion || row.puesto_contratacion || '',
+        jornada: row.Jornada || row.jornada || '',
+        empresa: row.Empresa || row.empresa || '',
+        buque: row.Buque || row.buque || '',
+        parte: row.Parte || row.parte || ''
+      })).filter(item => item.fecha);
+
+      console.log(`📥 Obtenidos ${jornalesChapa.length} jornales del backup`);
+      return jornalesChapa;
+
+    } catch (error) {
+      console.error('Error obteniendo jornales del backup:', error);
+      return [];
     }
   },
 
@@ -864,6 +971,112 @@ const SheetsAPI = {
     } catch (error) {
       console.error('Error obteniendo jornales:', error);
       // En caso de error, retornar array vacío en lugar de datos mock
+      return [];
+    }
+  },
+
+  /**
+   * [ROBUSTO] Obtiene jornales históricos desde la hoja Jornales_historico
+   * Columnas esperadas: Chapa, Fecha, Puesto, Jornada, Empresa, Buque, Parte, Logo_Empresa_URL
+   */
+  async getJornalesHistorico(chapa) {
+    try {
+      // Usa fetchSheetData, que es robusto y lee cabeceras
+      const data = await fetchSheetData(SHEETS_CONFIG.SHEET_ID, SHEETS_CONFIG.GID_JORNALES_HISTORICO);
+
+      // Filtrar TODOS los registros por chapa
+      const jornalesChapa = data.filter(row => {
+        const rowChapa = (row.Chapa || row.chapa || '').toString().trim();
+        return rowChapa === chapa.toString().trim();
+      }).map(row => ({
+        // Mapea usando los nombres de cabecera esperados
+        chapa: row.Chapa || row.chapa || '',
+        fecha: row.Fecha || row.fecha || '',
+        puesto: row.Puesto || row.puesto || '',
+        jornada: row.Jornada || row.jornada || '',
+        empresa: row.Empresa || row.empresa || '',
+        buque: row.Buque || row.buque || '',
+        parte: row.Parte || row.parte || '',
+        logo_empresa_url: row.Logo_Empresa_URL || row.logo_empresa_url || ''
+      })).filter(item => item.fecha); // Filtrar filas sin fecha
+
+      console.log(`Jornales históricos para chapa ${chapa}:`, jornalesChapa.length);
+      return jornalesChapa;
+
+    } catch (error) {
+      console.error('Error obteniendo jornales históricos:', error);
+      return [];
+    }
+  },
+
+  /**
+   * [ROBUSTO] Obtiene contrataciones desde la hoja contrata_glide
+   * Columnas esperadas: Fecha, Chapa, Puesto_Contratacion, Jornada, Empresa, Buque, Parte, Logo_Empresa_URL
+   */
+  async getContrataGlide(chapa = null) {
+    try {
+      // Usa fetchSheetData, que es robusto y lee cabeceras
+      const data = await fetchSheetData(SHEETS_CONFIG.SHEET_ID, SHEETS_CONFIG.GID_CONTRATACION, false); // No usar cache para contrataciones
+
+      // Mapear todas las filas
+      const contrataciones = data.map(row => ({
+        fecha: row.Fecha || row.fecha || '',
+        chapa: (row.Chapa || row.chapa || '').toString().trim(),
+        puesto: row.Puesto_Contratacion || row.puesto_contratacion || row.Puesto || row.puesto || '',
+        jornada: row.Jornada || row.jornada || '',
+        empresa: row.Empresa || row.empresa || '',
+        buque: row.Buque || row.buque || '',
+        parte: row.Parte || row.parte || '',
+        logo_empresa_url: row.Logo_Empresa_URL || row.logo_empresa_url || ''
+      })).filter(item => item.fecha && item.chapa); // Filtrar filas sin fecha o chapa
+
+      // Filtrar por chapa si se proporciona
+      if (chapa) {
+        const filtered = contrataciones.filter(c => c.chapa === chapa.toString().trim());
+        console.log(`Contrataciones glide para chapa ${chapa}:`, filtered.length);
+        return filtered;
+      }
+
+      console.log('Total contrataciones glide:', contrataciones.length);
+      return contrataciones;
+
+    } catch (error) {
+      console.error('Error obteniendo contrataciones glide:', error);
+      return [];
+    }
+  },
+
+  /**
+   * [ROBUSTO] Obtiene jornales desde el histórico acumulado (Jornales_Historico_Acumulado)
+   * Esta pestaña se alimenta automáticamente cada hora desde contrata_glide vía Apps Script
+   * Columnas: Fecha, Chapa, Puesto_Contratacion, Jornada, Empresa, Buque, Parte, Logo_Empresa_URL, Timestamp_Guardado
+   */
+  async getJornalesHistoricoAcumulado(chapa) {
+    try {
+      // Usa fetchSheetData, robusto y lee cabeceras
+      const data = await fetchSheetData(SHEETS_CONFIG.SHEET_ID, SHEETS_CONFIG.GID_JORNALES_HISTORICO_ACUMULADO, false); // No cache
+
+      // Filtrar por chapa y mapear
+      const jornalesChapa = data.filter(row => {
+        const rowChapa = (row.Chapa || row.chapa || '').toString().trim();
+        return rowChapa === chapa.toString().trim();
+      }).map(row => ({
+        chapa: row.Chapa || row.chapa || '',
+        fecha: row.Fecha || row.fecha || '',
+        puesto: row.Puesto_Contratacion || row.puesto_contratacion || row.Puesto || row.puesto || '',
+        jornada: row.Jornada || row.jornada || '',
+        empresa: row.Empresa || row.empresa || '',
+        buque: row.Buque || row.buque || '',
+        parte: row.Parte || row.parte || '',
+        logo_empresa_url: row.Logo_Empresa_URL || row.logo_empresa_url || '',
+        timestamp_guardado: row.Timestamp_Guardado || row.timestamp_guardado || ''
+      })).filter(item => item.fecha && item.jornada); // Filtrar filas sin fecha o jornada
+
+      console.log(`✅ Jornales históricos acumulados para chapa ${chapa}:`, jornalesChapa.length);
+      return jornalesChapa;
+
+    } catch (error) {
+      console.error('❌ Error obteniendo jornales históricos acumulados:', error);
       return [];
     }
   },
