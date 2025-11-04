@@ -39,6 +39,7 @@ const ENLACES_DATA = [
   { titulo: 'Teléfonos Terminales', url: 'https://drive.google.com/file/d/1KxLm_X_0JdUEJF7JUuIvNNleU-PTqUgv/view', categoria: 'Información', color: 'green' },
   { titulo: 'Tabla Contratación', url: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSTtbkA94xqjf81lsR7bLKKtyES2YBDKs8J2T4UrSEan7e5Z_eaptShCA78R1wqUyYyASJxmHj3gDnY/pubhtml?gid=1388412839&single=true', categoria: 'Información', color: 'green' },
   { titulo: 'Chapero', url: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTrMuapybwZUEGPR1vsP9p1_nlWvznyl0sPD4xWsNJ7HdXCj1ABY1EpU1um538HHZQyJtoAe5Niwrxq/pubhtml?gid=841547354&single=true', categoria: 'Información', color: 'green' },
+  { titulo: 'Listado Ingreso CPE', url: 'https://drive.google.com/file/d/1YzLn6JHmCdQMrMlpNByIsdlYW3iU0P43/view?usp=drive_link', categoria: 'Información', color: 'green' },
   { titulo: 'Previsión Demandas', url: 'https://noray.cpevalencia.com/PrevisionDemanda.asp', categoria: 'Información', color: 'green' },
   { titulo: 'Chapero CPE', url: 'https://noray.cpevalencia.com/Chapero.asp', categoria: 'Información', color: 'green' },
 
@@ -49,6 +50,16 @@ const ENLACES_DATA = [
 
 // Noticias y avisos - Añadir contenido real aquí
 const NOTICIAS_DATA = [
+  { 
+  titulo: '⚙️ Actualización: Sistema de Contratación más Robusto',
+    fecha: '04/11/2025',
+    contenido: `Se ha implementado un sistema robusto para garantizar la visibilidad de tus asignaciones, incluso si el sistema principal falla:
+    <ul style="list-style-type: disc; margin-left: 20px; margin-top: 10px;">
+      <li style="margin-bottom: 5px;"><strong>Mi Contratación:</strong> Ahora se guarda en tu dispositivo (localStorage). Si el CSV de contratación falla, tus asignaciones se mantienen visibles hasta medianoche (00:00).</li>
+      <li style="margin-bottom: 5px;"><strong>Mis Jornales:</strong> El histórico es totalmente independiente y se actualiza automáticamente cada hora vía Apps Script.</li>
+      <li><strong>Nuevo Enlace:</strong> Se ha añadido "Listado Ingreso CPE" en la sección de Enlaces Útiles.</li>
+    </ul>`
+  },
   {
     titulo: '🚀 ¡Nueva Función: Posición en la Puerta!',
     fecha: '02/11/2025', // <-- Recuerda ajustar la fecha si lo necesitas
@@ -695,12 +706,12 @@ function closeSidebar() {
 
 /**
  * Carga la página de contratación
- */
-/**
- * Carga la página de contratación
- * ACTUALIZADO: Muestra contrataciones hasta las 00:00 (medianoche) del día
- * - Jornada 02-08: se muestra hasta medianoche del día de la jornada (se contrata el día anterior)
- * - Otras jornadas: se muestran hasta medianoche del día de la contratación
+ * LÓGICA ROBUSTA:
+ * 1. Lee contrataciones del CSV
+ * 2. Guarda en localStorage con timestamp
+ * 3. Muestra desde localStorage (persistente hasta medianoche)
+ * 4. Jornada 02-08: se muestra hasta medianoche del día siguiente
+ * 5. Otras jornadas: se muestran hasta medianoche del día de contratación
  */
 async function loadContratacion() {
   const container = document.getElementById('contratacion-content');
@@ -712,18 +723,11 @@ async function loadContratacion() {
   container.innerHTML = '';
 
   try {
-    // Obtener todas las contrataciones desde la URL pivotada (funciona bien)
-    const allData = await SheetsAPI.getContrataciones(AppState.currentUser);
-
-    // LÓGICA DE HORARIO: Mostrar hasta las 00:00 (medianoche)
     const ahora = new Date();
-
-    // Obtener fechas relevantes (sin hora, solo fecha)
     const hoy = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
     const manana = new Date(hoy);
     manana.setDate(manana.getDate() + 1);
 
-    // Formatear fechas para comparación (dd/mm/yyyy)
     const formatFecha = (fecha) => {
       const dd = String(fecha.getDate()).padStart(2, '0');
       const mm = String(fecha.getMonth() + 1).padStart(2, '0');
@@ -734,67 +738,111 @@ async function loadContratacion() {
     const fechaHoy = formatFecha(hoy);
     const fechaManana = formatFecha(manana);
 
-    console.log('=== DEBUG CONTRATACIONES ===');
+    console.log('=== CONTRATACIONES - MODO ROBUSTO ===');
     console.log('Fecha hoy:', fechaHoy);
-    console.log('Fecha mañana:', fechaManana);
-    console.log('Total contrataciones obtenidas:', allData.length);
+    console.log('Hora actual:', ahora.toTimeString().substring(0, 5));
 
-    // Mostrar primeras 5 contrataciones para ver estructura
-    console.log('Primeras 5 contrataciones:', allData.slice(0, 5));
+    // 1. INTENTAR LEER DEL CSV Y ACTUALIZAR LOCALSTORAGE
+    let contratacionesActualizadas = false;
+    try {
+      const allData = await SheetsAPI.getContrataciones(AppState.currentUser);
+      console.log(`📥 CSV: ${allData.length} contrataciones obtenidas`);
 
-    // Normalizar formato de jornada (eliminar espacios, normalizar separadores)
+      if (allData.length > 0) {
+        // Obtener caché actual
+        let cacheContrataciones = JSON.parse(localStorage.getItem('contrataciones_cache') || '{}');
+        const userKey = AppState.currentUser;
+
+        // Inicializar si no existe
+        if (!cacheContrataciones[userKey]) {
+          cacheContrataciones[userKey] = [];
+        }
+
+        // Agregar nuevas contrataciones al caché (evitar duplicados)
+        allData.forEach(nueva => {
+          const existe = cacheContrataciones[userKey].some(c =>
+            c.fecha === nueva.fecha &&
+            c.jornada === nueva.jornada &&
+            c.puesto === nueva.puesto
+          );
+          if (!existe) {
+            cacheContrataciones[userKey].push({
+              ...nueva,
+              timestamp_guardado: new Date().toISOString()
+            });
+            console.log(`✅ Nueva contratación guardada: ${nueva.jornada} - ${nueva.fecha}`);
+          }
+        });
+
+        // Guardar caché actualizado
+        localStorage.setItem('contrataciones_cache', JSON.stringify(cacheContrataciones));
+        contratacionesActualizadas = true;
+        console.log(`💾 Caché actualizado: ${cacheContrataciones[userKey].length} total`);
+      }
+    } catch (error) {
+      console.warn('⚠️ No se pudo leer del CSV:', error.message);
+    }
+
+    // 2. LEER DESDE LOCALSTORAGE (FUENTE PRINCIPAL DE VISUALIZACIÓN)
+    const cacheContrataciones = JSON.parse(localStorage.getItem('contrataciones_cache') || '{}');
+    const userKey = AppState.currentUser;
+    const allCachedData = cacheContrataciones[userKey] || [];
+
+    console.log(`📂 localStorage: ${allCachedData.length} contrataciones en caché`);
+
+    // Normalizar formato de jornada
     const normalizeJornada = (jornada) => {
       if (!jornada) return '';
-      // Convertir "14 a 20" → "14-20", eliminar espacios extra
       let norm = jornada.toString().trim().toLowerCase();
-      norm = norm.replace(/\s*a\s*/g, '-'); // Reemplazar " a " por "-"
-      norm = norm.replace(/\s+/g, ''); // Eliminar espacios restantes
+      norm = norm.replace(/\s*a\s*/g, '-');
+      norm = norm.replace(/\s+/g, '');
       return norm;
     };
 
-    // Filtrar contrataciones según la lógica:
-    // - Jornada 02-08 con fecha de mañana: mostrar hoy (se contrató hoy para mañana, se ve hasta medianoche de mañana)
-    // - Cualquier jornada con fecha de hoy: mostrar hoy
-    const data = allData.filter(item => {
+    // 3. FILTRAR CONTRATACIONES VÁLIDAS (según horario de medianoche)
+    const data = allCachedData.filter(item => {
       const jornadaNorm = normalizeJornada(item.jornada);
-      const jornadaOriginal = item.jornada;
 
-      // Debug para jornadas específicas
-      if (item.chapa === '983' || item.chapa === '813' || item.chapa === 983 || item.chapa === 813) {
-        console.log(`
-          🔍 DEBUG Chapa ${item.chapa}:
-          - Jornada original: "${jornadaOriginal}"
-          - Jornada normalizada: "${jornadaNorm}"
-          - Fecha: "${item.fecha}"
-          - Fecha hoy: "${fechaHoy}"
-          - ¿Coincide fecha?: ${item.fecha === fechaHoy}
-        `);
-      }
-
-      // Jornada 02-08 se contrata el día anterior (hoy), pero tiene fecha de mañana
-      // Debe mostrarse desde HOY (cuando se contrata) hasta las 00:00 de MAÑANA
+      // Jornada 02-08 con fecha de mañana: mostrar hasta medianoche de mañana
       if (jornadaNorm === '02-08' && item.fecha === fechaManana) {
-        console.log(`✓ Mostrando jornada 02-08 para chapa ${item.chapa} (fecha: ${item.fecha})`);
         return true;
       }
 
-      // Todas las jornadas con fecha de hoy se muestran
+      // Cualquier jornada con fecha de hoy: mostrar hasta medianoche de hoy
       if (item.fecha === fechaHoy) {
-        console.log(`✓ Mostrando jornada ${jornadaOriginal} (norm: ${jornadaNorm}) para chapa ${item.chapa}`);
         return true;
       }
 
       return false;
     });
 
-    console.log(`Total contrataciones a mostrar: ${data.length}`);
+    console.log(`📊 Mostrando: ${data.length} contrataciones válidas`);
 
-    // Guardar TODAS las contrataciones obtenidas en el histórico de jornales
-    if (allData.length > 0) {
+    // 4. LIMPIAR CONTRATACIONES ANTIGUAS DEL CACHÉ (después de medianoche)
+    const dataLimpia = allCachedData.filter(item => {
+      const jornadaNorm = normalizeJornada(item.jornada);
+
+      // Mantener 02-08 de mañana
+      if (jornadaNorm === '02-08' && item.fecha === fechaManana) return true;
+
+      // Mantener contrataciones de hoy
+      if (item.fecha === fechaHoy) return true;
+
+      // Eliminar contrataciones antiguas
+      return false;
+    });
+
+    if (dataLimpia.length !== allCachedData.length) {
+      cacheContrataciones[userKey] = dataLimpia;
+      localStorage.setItem('contrataciones_cache', JSON.stringify(cacheContrataciones));
+      console.log(`🗑️ Limpieza: ${allCachedData.length - dataLimpia.length} contrataciones antiguas eliminadas`);
+    }
+
+    // 5. GUARDAR EN HISTÓRICO DE JORNALES (para "Mis Jornales")
+    if (data.length > 0) {
       const historico = JSON.parse(localStorage.getItem('jornales_historico') || '[]');
 
-      // Agregar solo las nuevas (evitar duplicados)
-      allData.forEach(nueva => {
+      data.forEach(nueva => {
         const existe = historico.some(h =>
           h.fecha === nueva.fecha &&
           h.jornada === nueva.jornada &&
@@ -807,19 +855,18 @@ async function loadContratacion() {
       });
 
       localStorage.setItem('jornales_historico', JSON.stringify(historico));
-      console.log(`Guardadas ${historico.length} jornales en el histórico (localStorage)`);
+      console.log(`💾 Histórico actualizado: ${historico.length} jornales totales`);
 
-      // Sincronizar automáticamente al backup en Google Sheets
+      // Sincronizar con Google Sheets (background)
       try {
-        console.log('🔄 Iniciando sincronización automática al backup...');
         await SheetsAPI.sincronizarJornalesBackup(AppState.currentUser, historico.filter(h => h.chapa === AppState.currentUser));
-        console.log('✅ Sincronización automática completada');
+        console.log('✅ Sincronizado con Google Sheets');
       } catch (syncError) {
-        console.warn('⚠️ No se pudo sincronizar al backup:', syncError);
-        // No bloqueamos la carga si falla la sincronización
+        console.warn('⚠️ Sincronización fallida:', syncError);
       }
     }
 
+    // 6. ORDENAR Y MOSTRAR
     // Ordenar por fecha y jornada
     const sortedData = data.sort((a, b) => {
       // Primero por fecha descendente
@@ -2071,4 +2118,9 @@ window.agregarContratacionesManual = function(contrataciones) {
 
   return { agregadas, total: historico.length };
 };
+
+
+
+
+
 
