@@ -50,18 +50,6 @@ const ENLACES_DATA = [
 // Noticias y avisos - Añadir contenido real aquí
 const NOTICIAS_DATA = [
   {
-    titulo: '🔧 Mejoras importantes en jornales y contrataciones',
-    fecha: '03/11/2025',
-    contenido: `Se han implementado importantes mejoras en el portal:
-    <ul style="list-style-type: disc; margin-left: 20px; margin-top: 10px;">
-      <li style="margin-bottom: 5px;"><b>Sistema robusto de jornales:</b> Ahora los jornales se guardan automáticamente, sin necesidad de que entres a la app.</li>
-      <li style="margin-bottom: 5px;"><b>Histórico permanente:</b> Todos tus jornales quedan guardados de forma permanente y segura.</li>
-      <li style="margin-bottom: 5px;"><b>Logos de empresas:</b> Los logos de APM, CSP, MSC, VTEU y ERSHIP ahora se visualizan correctamente en "Mi Contratación".</li>
-      <li style="margin-bottom: 5px;"><b>Nuevos enlaces:</b> Añadidos "Previsión Demandas" y "Chapero CPE" en la sección Información.</li>
-      <li><b>Contraseñas mejoradas:</b> Arreglado el bug en el cambio de contraseña.</li>
-    </ul>`
-  },
-  {
     titulo: '🚀 ¡Nueva Función: Posición en la Puerta!',
     fecha: '02/11/2025', // <-- Recuerda ajustar la fecha si lo necesitas
     contenido: `Ahora puedes ver en la pantalla de "Dashboard" (justo debajo de tu nombre) a cuántas posiciones estás de la última puerta contratada.
@@ -139,7 +127,7 @@ async function initializeApp() {
   if (storedChapa) {
     // Obtener nombre do del sheet
     const nombre = await SheetsAPI.getNombrePorChapa(storedChapa);
-    loginUser(storedChapa, nombre);
+    await loginUser(storedChapa, nombre);
   } else {
     showPage('login');
   }
@@ -327,7 +315,7 @@ async function handleLogin() {
 
     if (passwordValida) {
       // Login exitoso - guardar chapa y nombre
-      loginUser(chapa, usuario.nombre || `Chapa ${chapa}`);
+      await loginUser(chapa, usuario.nombre || `Chapa ${chapa}`);
     } else {
       throw new Error('Contraseña incorrecta');
     }
@@ -352,7 +340,7 @@ async function handleLogin() {
 /**
  * Inicia sesión de usuario
  */
-function loginUser(chapa, nombre = null) {
+async function loginUser(chapa, nombre = null) {
   AppState.currentUser = chapa;
   AppState.currentUserName = nombre || `Chapa ${chapa}`;
   AppState.isAuthenticated = true;
@@ -361,10 +349,17 @@ function loginUser(chapa, nombre = null) {
   localStorage.setItem('currentChapa', chapa);
   localStorage.setItem('currentUserName', AppState.currentUserName);
 
-  // r cache de usuarios para el foro
-  const usuariosCache = JSON.parse(localStorage.getItem('usuarios_cache') || '{}');
-  usuariosCache[chapa] = AppState.currentUserName;
-  localStorage.setItem('usuarios_cache', JSON.stringify(usuariosCache));
+  // Actualizar cache de usuarios para el foro (obtener todos los nombres desde Google Sheets)
+  try {
+    await actualizarCacheNombres();
+    console.log('✅ Cache de nombres actualizado en login');
+  } catch (error) {
+    console.warn('⚠️ No se pudo actualizar cache de nombres:', error);
+    // Fallback: al menos guardar el usuario actual
+    const usuariosCache = JSON.parse(localStorage.getItem('usuarios_cache') || '{}');
+    usuariosCache[chapa] = AppState.currentUserName;
+    localStorage.setItem('usuarios_cache', JSON.stringify(usuariosCache));
+  }
 
   // r UI
   updateUIForAuthenticatedUser();
@@ -1811,11 +1806,24 @@ function renderForoMessages(messages) {
   const usuariosCache = JSON.parse(localStorage.getItem('usuarios_cache') || '{}');
 
   sorted.forEach(msg => {
-    const isOwn = msg.chapa === AppState.currentUser;
+    // Normalizar chapa (quitar "0" inicial si es de 5 dígitos: 80983 → 983)
+    let chapaOriginal = msg.chapa.toString();
+    let chapaNormalizada = chapaOriginal;
+
+    // Si la chapa empieza con "0" o "80" y tiene más de 3 dígitos, normalizarla
+    if (chapaOriginal.length >= 4 && chapaOriginal.startsWith('80')) {
+      // 80983 → 983, 80784 → 784, etc.
+      chapaNormalizada = chapaOriginal.substring(2);
+    } else if (chapaOriginal.length >= 4 && chapaOriginal.startsWith('0')) {
+      // 0983 → 983, 0784 → 784, etc.
+      chapaNormalizada = chapaOriginal.substring(1);
+    }
+
+    const isOwn = chapaNormalizada === AppState.currentUser;
     const timeAgo = getTimeAgo(new Date(msg.timestamp));
 
-    // Obtener nombre del usuario (del cache o fallback a chapa)
-    const nombreUsuario = usuariosCache[msg.chapa] || `Chapa ${msg.chapa}`;
+    // Obtener nombre del usuario (del cache usando chapa normalizada o fallback a chapa normalizada)
+    const nombreUsuario = usuariosCache[chapaNormalizada] || `Chapa ${chapaNormalizada}`;
 
     const messageDiv = document.createElement('div');
     messageDiv.className = `foro-message ${isOwn ? 'own' : ''}`;
@@ -2063,6 +2071,4 @@ window.agregarContratacionesManual = function(contrataciones) {
 
   return { agregadas, total: historico.length };
 };
-
-
 
