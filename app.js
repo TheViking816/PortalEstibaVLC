@@ -2406,10 +2406,10 @@ async function loadSueldometro() {
         // Conductores OC tienen salarios fijos sin prima (solo laborables)
         esJornalFijo = true;
         const salariosOC = {
-          '08-14': 176,
-          '14-20': 176,
-          '20-02': 243,
-          '02-08': 303
+          '08-14': 179.75,
+          '14-20': 179.75,
+          '20-02': 253.75,
+          '02-08': 321.75
         };
 
         salarioBase = salariosOC[jornada] || 0;
@@ -2829,6 +2829,7 @@ async function loadSueldometro() {
     loading.classList.add('hidden');
   }
 }
+
 
 
 
