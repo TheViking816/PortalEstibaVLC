@@ -50,7 +50,33 @@ const ENLACES_DATA = [
 
 // Noticias y avisos - Añadir contenido real aquí
 const NOTICIAS_DATA = [
-  { 
+  {
+    titulo: '🔧 Corrección: Cálculo de Posiciones OC',
+    fecha: '05/11/2025',
+    contenido: `Se ha corregido un error en el cálculo de posiciones para el personal de <strong>OC (Operaciones Complementarias)</strong>:
+    <ul style="list-style-type: disc; margin-left: 20px; margin-top: 10px;">
+      <li style="margin-bottom: 5px;"><strong>Problema:</strong> El cálculo de "posiciones hasta la puerta" estaba considerando la puerta festiva en lugar de la laborable.</li>
+      <li style="margin-bottom: 5px;"><strong>Solución:</strong> Ahora tanto SP como OC calculan sus posiciones basándose únicamente en las <strong>puertas laborables</strong> (02-08, 08-14, 14-20, 20-02).</li>
+      <li><strong>Resultado:</strong> El indicador de posiciones en el Dashboard ahora muestra la distancia correcta para el personal de OC.</li>
+    </ul>
+    <p style="margin-top: 10px; font-style: italic; color: #64748b;">Gracias por reportar el problema. El cálculo ahora es preciso para todos los censos.</p>`
+  },
+  {
+    titulo: '💰 ¡NUEVA FUNCIONALIDAD: Sueldómetro!',
+    fecha: '05/11/2025',
+    contenido: `Llega la función más esperada: el <strong>Sueldómetro</strong>. Ahora puedes calcular automáticamente tu salario estimado por quincena:
+    <ul style="list-style-type: disc; margin-left: 20px; margin-top: 10px;">
+      <li style="margin-bottom: 5px;"><strong>Cálculo automático:</strong> Calcula tu salario base según tu puesto y jornada (laborable, festivo o sábado).</li>
+      <li style="margin-bottom: 5px;"><strong>Prima editable:</strong> Puedes modificar los movimientos o la prima directamente en la tabla.</li>
+      <li style="margin-bottom: 5px;"><strong>IRPF personalizable:</strong> Ajusta tu porcentaje de IRPF y ve el cálculo neto actualizado al instante.</li>
+      <li style="margin-bottom: 5px;"><strong>Complementos incluidos:</strong> Los puestos de Trincador y Trincador de Coches incluyen automáticamente su complemento de 46,94€ (marcado con *).</li>
+      <li style="margin-bottom: 5px;"><strong>Resumen por quincena:</strong> Visualiza totales de base, prima, bruto y neto organizados por quincenas.</li>
+      <li style="margin-bottom: 5px;"><strong>Estadísticas globales:</strong> Ve el total de jornales, total bruto/neto y promedio en la parte superior.</li>
+      <li><strong>Optimizado para móvil:</strong> Totalmente responsive y táctil para calcular desde cualquier dispositivo.</li>
+    </ul>
+    <p style="margin-top: 10px; font-weight: 600; color: #10b981;">¡Accede a "Sueldómetro" desde el menú lateral y comienza a calcular tus salarios!</p>`
+  },
+  {
   titulo: '⚙️ Actualización: Sistema de Contratación más Robusto',
     fecha: '04/11/2025',
     contenido: `Se ha implementado un sistema robusto para garantizar la visibilidad de tus asignaciones, incluso si el sistema principal falla:
@@ -652,6 +678,9 @@ function navigateTo(pageName) {
       break;
     case 'foro':
       loadForo();
+      break;
+    case 'sueldometro':
+      loadSueldometro();
       break;
   }
 }
@@ -2118,6 +2147,666 @@ window.agregarContratacionesManual = function(contrataciones) {
 
   return { agregadas, total: historico.length };
 };
+
+/**
+ * ===== SUELDÓMETRO =====
+ */
+
+/**
+ * Determina el tipo de día basado en fecha y jornada
+ * Maneja jornadas nocturnas que cruzan medianoche (02-08, 20-02)
+ */
+function determinarTipoDia(fecha, jornada) {
+  // Parsear fecha dd/mm/yyyy
+  const parts = fecha.split('/');
+  const day = parseInt(parts[0]);
+  const month = parseInt(parts[1]) - 1; // JavaScript months are 0-indexed
+  const year = parseInt(parts[2]);
+  const dateObj = new Date(year, month, day);
+
+  // Festivos de España 2025 (ajustar según sea necesario)
+  const festivos2025 = [
+    '01/01/2025', '06/01/2025', // Año Nuevo, Reyes
+    '18/04/2025', '19/04/2025', // Viernes Santo, Sábado Santo
+    '01/05/2025', // Día del Trabajador
+    '15/08/2025', // Asunción
+    '12/10/2025', // Día de la Hispanidad
+    '01/11/2025', // Todos los Santos
+    '06/12/2025', '08/12/2025', // Constitución, Inmaculada
+    '25/12/2025'  // Navidad
+  ];
+
+  const esFestivoFecha = (d) => {
+    const fechaNorm = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+    return festivos2025.includes(fechaNorm) || d.getDay() === 0; // Festivo oficial o domingo
+  };
+
+  const dayOfWeek = dateObj.getDay(); // 0=Domingo, 6=Sábado
+  const esFestivoHoy = esFestivoFecha(dateObj);
+
+  // Para jornadas nocturnas (02-08, 20-02) que cruzan medianoche
+  if (jornada === '02-08' || jornada === '20-02') {
+    const diaSiguiente = new Date(dateObj);
+    diaSiguiente.setDate(diaSiguiente.getDate() + 1);
+    const esFestivoManana = esFestivoFecha(diaSiguiente);
+
+    if (jornada === '02-08') {
+      // Jornada 02-08: empieza de noche y termina por la mañana
+      if (esFestivoHoy && !esFestivoManana) {
+        return 'FEST-LAB';
+      } else if (esFestivoManana) {
+        return 'FESTIVO';
+      } else {
+        return 'LABORABLE';
+      }
+    } else if (jornada === '20-02') {
+      // Jornada 20-02: empieza de tarde y termina de madrugada
+      if (!esFestivoHoy && esFestivoManana) {
+        return 'LAB-FEST';
+      } else if (esFestivoHoy) {
+        return 'FESTIVO';
+      } else if (dayOfWeek === 6) {
+        return 'SABADO';
+      } else {
+        return 'LABORABLE';
+      }
+    }
+  }
+
+  // Para jornadas diurnas (08-14, 14-20)
+  if (esFestivoHoy) {
+    return 'FESTIVO';
+  } else if (dayOfWeek === 6) {
+    return 'SABADO';
+  } else {
+    return 'LABORABLE';
+  }
+}
+
+/**
+ * Carga y muestra el Sueldómetro con cálculo de salarios
+ */
+async function loadSueldometro() {
+  const content = document.getElementById('sueldometro-content');
+  const loading = document.getElementById('sueldometro-loading');
+  const stats = document.getElementById('sueldometro-stats');
+
+  if (!content) return;
+
+  loading.classList.remove('hidden');
+  content.innerHTML = '';
+  stats.innerHTML = '';
+
+  // Inicializar IRPF control
+  const irpfControl = document.getElementById('sueldometro-irpf-control');
+  const irpfInput = document.getElementById('irpf-input');
+
+  // Cargar IRPF guardado o usar valor por defecto (15%)
+  const irpfKey = `irpf_${AppState.currentUser}`;
+  let irpfPorcentaje = parseFloat(localStorage.getItem(irpfKey)) || 15;
+  if (irpfInput) {
+    irpfInput.value = irpfPorcentaje;
+  }
+
+  try {
+    // 1. Cargar datos necesarios
+    console.log('📊 Cargando datos del Sueldómetro...');
+
+    const [jornales, mapeoPuestos, tablaSalarial] = await Promise.all([
+      SheetsAPI.getJornalesHistoricoAcumulado(AppState.currentUser),
+      SheetsAPI.getMapeoPuestos(),
+      SheetsAPI.getTablaSalarial()
+    ]);
+
+    console.log(`✅ Datos cargados: ${jornales.length} jornales, ${mapeoPuestos.length} puestos, ${tablaSalarial.length} salarios`);
+
+    if (jornales.length === 0) {
+      content.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">📊</div>
+          <h3>No hay jornales registrados</h3>
+          <p>Cuando trabajes tus primeros jornales aparecerán aquí con su estimación salarial</p>
+        </div>
+      `;
+      loading.classList.add('hidden');
+      return;
+    }
+
+    // 2. Agrupar por quincena
+    const quincenasMap = groupByQuincena(jornales);
+
+    // 3. Calcular salario para cada jornal
+    const jornalesConSalario = jornales.map((jornal, index) => {
+      // Normalizar jornada: "08 a 14" → "08-14", "20 a 02" → "20-02"
+      let jornada = jornal.jornada.replace(/\s+a\s+/g, '-').replace(/\s+/g, '').trim();
+
+      // Normalizar puesto para comparaciones case-insensitive (eliminar espacios extra)
+      const puestoLower = jornal.puesto.trim().replace(/\s+/g, ' ').toLowerCase();
+
+      // 3.1 Buscar en mapeo de puestos usando comparación case-insensitive
+      let mapeo = mapeoPuestos.find(m => m.puesto.trim().replace(/\s+/g, ' ').toLowerCase() === puestoLower);
+
+      // Mapeo de fallback para puestos conocidos que pueden no estar en la hoja
+      const mapeoFallback = {
+        'especialista': { puesto: 'Especialista', grupo_salarial: 'G1', tipo_operativa: 'Contenedor' },
+        'trincador': { puesto: 'Trincador', grupo_salarial: 'G1', tipo_operativa: 'Trincador' },
+        'trincador de coches': { puesto: 'Trincador de Coches', grupo_salarial: 'G1', tipo_operativa: 'Manual' },
+        'conductor de coches': { puesto: 'Conductor de Coches', grupo_salarial: 'G2', tipo_operativa: 'Coches' },
+        'conductor de 2a': { puesto: 'Conductor de 2a', grupo_salarial: 'G2', tipo_operativa: 'Coches' }
+      };
+
+      if (!mapeo) {
+        // Intentar usar mapeo de fallback (búsqueda case-insensitive)
+        if (mapeoFallback[puestoLower]) {
+          mapeo = mapeoFallback[puestoLower];
+          console.log(`ℹ️ Usando mapeo de fallback para: "${jornal.puesto}"`);
+        } else {
+          console.warn(`⚠️ Puesto no encontrado en mapeo: "${jornal.puesto}"`);
+          if (index === 0) {
+            console.log('Puestos disponibles en mapeo:', mapeoPuestos.map(m => m.puesto));
+          }
+          return { ...jornal, salario_base: 0, prima: 0, total: 0, error: 'Puesto no mapeado' };
+        }
+      }
+
+      // Obtener grupo salarial y tipo de operativa
+      let grupoSalarial = mapeo.grupo_salarial; // G1 o G2
+      let tipoOperativa = mapeo.tipo_operativa; // Contenedor o Coches
+
+      // Forzar valores correctos para Conductor de Coches (asegurar coherencia)
+      if (puestoLower === 'conductor de coches' || puestoLower === 'conductor de 2a') {
+        grupoSalarial = 'G2';
+        tipoOperativa = 'Coches';
+      }
+
+      // Normalizar nombre de puesto para display
+      let puestoDisplay = jornal.puesto;
+      if (puestoLower === 'conductor de coches') {
+        puestoDisplay = 'Conductor de 2a';
+      }
+
+      // 3.2 Determinar tipo de día
+      const tipoDia = determinarTipoDia(jornal.fecha, jornada);
+
+      // 3.3 Crear clave de jornada (ej: "08-14_LABORABLE")
+      const claveJornada = `${jornada}_${tipoDia}`;
+
+      // 3.4 Buscar en tabla salarial
+      const salarioInfo = tablaSalarial.find(s => s.clave_jornada === claveJornada);
+
+      if (!salarioInfo) {
+        console.warn(`⚠️ Clave de jornada no encontrada: "${claveJornada}"`);
+        if (index === 0) {
+          console.log('Claves disponibles en tabla salarial:', tablaSalarial.map(t => t.clave_jornada));
+        }
+        return { ...jornal, salario_base: 0, prima: 0, total: 0, error: 'Jornada no encontrada' };
+      }
+
+      // Debug del primer jornal
+      if (index === 0) {
+        console.log('🔍 DEBUG PRIMER JORNAL:');
+        console.log('  Jornal:', jornal);
+        console.log('  Puesto original:', jornal.puesto);
+        console.log('  Puesto normalizado:', puestoLower);
+        console.log('  Mapeo encontrado:', mapeo);
+        console.log('  Tipo día:', tipoDia);
+        console.log('  Clave jornada:', claveJornada);
+        console.log('  Salario info:', salarioInfo);
+      }
+
+      // 3.5 Detectar si es Conductor OC (sin barco)
+      // OC usa "--" (dos guiones) en el campo buque
+      const esConductorOC = puestoLower === 'conductor de 1a' &&
+                            (!jornal.buque || jornal.buque.trim() === '' || jornal.buque.trim() === '--');
+
+      let salarioBase = 0;
+      let prima = 0;
+      let esJornalFijo = false;
+
+      // Tabla de primas mínimas para Trincador según horario y jornada
+      const primasMinimaTrincador = {
+        '02-08_FESTIVO': 203.719,
+        '02-08_LABORABLE': 140.105,
+        '02-08_SABADO': 140.105,
+        '08-14_FESTIVO': 114.031,
+        '08-14_LABORABLE': 88.822,
+        '08-14_SABADO': 88.822,
+        '14-20_FESTIVO': 144.967,
+        '14-20_LABORABLE': 88.822,
+        '14-20_SABADO': 114.031,
+        '20-02_FESTIVO': 220.058,
+        '20-02_LABORABLE': 112.287,
+        '20-02_SABADO': 151.393
+      };
+
+      if (esConductorOC) {
+        // Conductores OC tienen salarios fijos sin prima (solo laborables)
+        esJornalFijo = true;
+        const salariosOC = {
+          '08-14': 176,
+          '14-20': 176,
+          '20-02': 243,
+          '02-08': 303
+        };
+
+        salarioBase = salariosOC[jornada] || 0;
+        prima = 0; // Sin prima para OC
+      } else {
+        // Cálculo normal para SP y Contenedor/Coches/Trincador
+        salarioBase = grupoSalarial === 'G1' ? salarioInfo.jornal_base_g1 : salarioInfo.jornal_base_g2;
+
+        // Añadir complemento de 46,94€ para Trincador y Trincador de Coches
+        if (puestoLower === 'trincador' || puestoLower === 'trincador de coches') {
+          salarioBase += 46.94;
+          if (index === 0) {
+            console.log(`✅ Complemento aplicado a "${jornal.puesto}": +46.94€`);
+          }
+        }
+
+        // 3.6 Calcular prima (por defecto 120 movimientos para Contenedor)
+        if (tipoOperativa === 'Coches') {
+          // Para Coches: usar prima fija de la tabla
+          prima = salarioInfo.prima_minima_coches;
+          if (index === 0) {
+            console.log(`🚗 Coches detectado - Prima: ${prima}€ (de prima_minima_coches)`);
+          }
+        } else if (tipoOperativa === 'Contenedor') {
+          // A partir de 120 movimientos (>=120) se usa coef_mayor
+          prima = 120 * salarioInfo.coef_prima_mayor120;
+        } else if (tipoOperativa === 'Trincador') {
+          // Para Trincador: usar prima mínima según horario y jornada
+          const clavePrima = `${jornada}_${tipoDia}`;
+          prima = primasMinimaTrincador[clavePrima] || 0;
+          if (index === 0) {
+            console.log(`🔧 Trincador detectado - Prima mínima: ${prima}€ (clave: ${clavePrima})`);
+          }
+        } else if (tipoOperativa === 'Manual') {
+          // Para Manual (ej: Trincador de Coches): prima editable, iniciar en 0
+          prima = 0;
+          if (index === 0) {
+            console.log(`✋ Manual detectado (${jornal.puesto}) - Prima editable iniciada en 0€`);
+          }
+        }
+      }
+
+      // 3.7 Total
+      const total = salarioBase + prima;
+
+      if (index === 0) {
+        console.log('  Grupo salarial:', grupoSalarial);
+        console.log('  Es Conductor OC:', esConductorOC);
+        console.log('  Salario base:', salarioBase);
+        console.log('  Prima (120 mov):', prima);
+        console.log('  Total:', total);
+      }
+
+      // Detectar si incluye complemento para mostrar asterisco
+      const incluyeComplemento = (puestoLower === 'trincador' || puestoLower === 'trincador de coches');
+
+      return {
+        ...jornal,
+        puesto_display: puestoDisplay,
+        salario_base: salarioBase,
+        prima: prima,
+        total: total,
+        grupo_salarial: grupoSalarial,
+        tipo_operativa: tipoOperativa,
+        tipo_dia: tipoDia,
+        clave_jornada: claveJornada,
+        es_jornal_fijo: esJornalFijo,
+        incluye_complemento: incluyeComplemento
+      };
+    });
+
+    // 4. Calcular estadísticas globales
+    const totalJornales = jornalesConSalario.length;
+    const salarioTotalBruto = jornalesConSalario.reduce((sum, j) => sum + j.total, 0);
+    const salarioTotalNeto = salarioTotalBruto * (1 - irpfPorcentaje / 100);
+    const salarioPromedioBruto = salarioTotalBruto / totalJornales;
+    const salarioPromedioNeto = salarioTotalNeto / totalJornales;
+
+    // 5. Mostrar IRPF control y estadísticas
+    if (irpfControl) {
+      irpfControl.style.display = 'block';
+    }
+
+    stats.innerHTML = `
+      <div class="stat-card">
+        <div class="stat-value">${totalJornales}</div>
+        <div class="stat-label">Jornales Totales</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">${salarioTotalBruto.toFixed(2)}€</div>
+        <div class="stat-label">Total Bruto</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">${salarioTotalNeto.toFixed(2)}€</div>
+        <div class="stat-label">Total Neto (${irpfPorcentaje}% IRPF)</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">${salarioPromedioBruto.toFixed(2)}€</div>
+        <div class="stat-label">Promedio Bruto</div>
+      </div>
+    `;
+
+    // 6. Renderizar quincenas con salarios
+    const quincenasArray = Array.from(quincenasMap.entries())
+      .map(([key, jornalesQuincena]) => {
+        const [year, month, quincena] = key.split('-').map(Number);
+        return { year, month, quincena, jornales: jornalesQuincena };
+      })
+      .sort((a, b) => {
+        // Ordenar por año, mes, quincena descendente
+        if (a.year !== b.year) return b.year - a.year;
+        if (a.month !== b.month) return b.month - a.month;
+        return b.quincena - a.quincena;
+      });
+
+    const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+    quincenasArray.forEach(({ year, month, quincena, jornales: jornalesQuincena }) => {
+      const jornalesConSalarioQuincena = jornalesQuincena.map(j => {
+        return jornalesConSalario.find(jcs =>
+          jcs.fecha === j.fecha &&
+          jcs.jornada === j.jornada &&
+          jcs.puesto === j.puesto
+        );
+      }).filter(j => j);
+
+      const totalQuincenaBruto = jornalesConSalarioQuincena.reduce((sum, j) => sum + j.total, 0);
+      const totalQuincenaNeto = totalQuincenaBruto * (1 - irpfPorcentaje / 100);
+      const totalBase = jornalesConSalarioQuincena.reduce((sum, j) => sum + j.salario_base, 0);
+      const totalPrima = jornalesConSalarioQuincena.reduce((sum, j) => sum + j.prima, 0);
+
+      // Verificar si hay jornales con complemento en esta quincena
+      const tieneComplemento = jornalesConSalarioQuincena.some(j => j.incluye_complemento);
+
+      const quincenaLabel = quincena === 1 ? '1-15' : '16-fin';
+      const monthName = monthNames[month - 1];
+      const emoji = quincena === 1 ? '📅' : '🗓️';
+
+      const card = document.createElement('div');
+      card.className = 'quincena-card';
+      card.innerHTML = `
+        <div class="quincena-header">
+          <h3>${emoji} ${quincenaLabel} ${monthName.toUpperCase()} ${year}</h3>
+          <div class="quincena-total">
+            <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.25rem;">
+              <div>
+                <span class="total-label">Bruto:</span>
+                <span class="total-value bruto-value">${totalQuincenaBruto.toFixed(2)}€</span>
+              </div>
+              <div>
+                <span class="total-label">Neto:</span>
+                <span class="total-value neto-value">${totalQuincenaNeto.toFixed(2)}€</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="quincena-summary">
+          <div class="summary-item">
+            <span class="summary-label">Jornales:</span>
+            <span class="summary-value">${jornalesConSalarioQuincena.length}</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">Base:</span>
+            <span class="summary-value">${totalBase.toFixed(2)}€</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">Prima:</span>
+            <span class="summary-value">${totalPrima.toFixed(2)}€</span>
+          </div>
+        </div>
+        <div class="jornales-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Jornada</th>
+                <th>Puesto</th>
+                <th>Base</th>
+                <th>Movimientos</th>
+                <th>Prima</th>
+                <th>Bruto</th>
+                <th>Neto</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-${year}-${month}-${quincena}">
+              ${jornalesConSalarioQuincena.map((j, idx) => {
+                const rowId = `row-${year}-${month}-${quincena}-${idx}`;
+                const movimientosDefault = 120;
+                const esOC = j.es_jornal_fijo;
+                const bruto = j.total;
+                const neto = bruto * (1 - irpfPorcentaje / 100);
+
+                return `
+                <tr id="${rowId}" data-row-index="${idx}">
+                  <td>${j.fecha}</td>
+                  <td><span class="badge badge-${j.jornada.replace(/\s+/g, '')}">${j.jornada}</span></td>
+                  <td>${j.puesto_display}${esOC ? ' <span class="badge-oc">OC</span>' : ''}</td>
+                  <td class="base-value">${j.salario_base.toFixed(2)}€${j.incluye_complemento ? '*' : ''}</td>
+                  <td>
+                    ${esOC ? `
+                      <span class="text-muted">Fijo</span>
+                    ` : j.tipo_operativa === 'Contenedor' && !esOC ? `
+                      <input
+                        type="number"
+                        class="movimientos-input"
+                        value="${movimientosDefault}"
+                        min="0"
+                        step="1"
+                        data-jornal-index="${idx}"
+                      />
+                    ` : `
+                      <span class="text-muted">N/A</span>
+                    `}
+                  </td>
+                  <td>
+                    ${esOC ? `
+                      <span class="text-muted">—</span>
+                    ` : `
+                      <input
+                        type="number"
+                        class="prima-input"
+                        value="${j.prima.toFixed(2)}"
+                        min="0"
+                        step="0.01"
+                        data-jornal-index="${idx}"
+                      />€
+                    `}
+                  </td>
+                  <td class="bruto-value"><strong>${bruto.toFixed(2)}€</strong></td>
+                  <td class="neto-value"><strong>${neto.toFixed(2)}€</strong></td>
+                </tr>
+              `}).join('')}
+            </tbody>
+          </table>
+        </div>
+        ${tieneComplemento ? `
+          <div class="complemento-nota" style="font-size: 0.85rem; color: #666; margin-top: 0.5rem; padding: 0.5rem; background: #f9f9f9; border-radius: 4px;">
+            <strong>*</strong> Los puestos Trincador y Trincador de Coches incluyen un complemento de 46,94€ en el salario base.
+          </div>
+        ` : ''}
+      `;
+
+      content.appendChild(card);
+
+      // Función auxiliar para actualizar totales
+      const actualizarTotales = () => {
+        // Recalcular totales de la quincena
+        const nuevoTotalBase = jornalesConSalarioQuincena.reduce((sum, j) => sum + j.salario_base, 0);
+        const nuevoTotalPrima = jornalesConSalarioQuincena.reduce((sum, j) => sum + j.prima, 0);
+        const nuevoTotalBruto = jornalesConSalarioQuincena.reduce((sum, j) => sum + j.total, 0);
+        const nuevoTotalNeto = nuevoTotalBruto * (1 - irpfPorcentaje / 100);
+
+        // Actualizar el resumen de la quincena
+        const summaryItems = card.querySelectorAll('.summary-value');
+        summaryItems[1].textContent = `${nuevoTotalBase.toFixed(2)}€`; // Base
+        summaryItems[2].textContent = `${nuevoTotalPrima.toFixed(2)}€`; // Prima
+
+        // Actualizar bruto y neto en el header
+        const brutoValue = card.querySelector('.bruto-value');
+        const netoValue = card.querySelector('.neto-value');
+        if (brutoValue) brutoValue.textContent = `${nuevoTotalBruto.toFixed(2)}€`;
+        if (netoValue) netoValue.textContent = `${nuevoTotalNeto.toFixed(2)}€`;
+
+        // Recalcular estadísticas globales
+        const totalGlobalBruto = jornalesConSalario.reduce((sum, j) => sum + j.total, 0);
+        const totalGlobalNeto = totalGlobalBruto * (1 - irpfPorcentaje / 100);
+        const promedioBruto = totalGlobalBruto / jornalesConSalario.length;
+
+        const statCards = stats.querySelectorAll('.stat-card .stat-value');
+        if (statCards.length >= 3) {
+          statCards[1].textContent = `${totalGlobalBruto.toFixed(2)}€`; // Total Bruto
+          statCards[2].textContent = `${totalGlobalNeto.toFixed(2)}€`; // Total Neto
+          statCards[3].textContent = `${promedioBruto.toFixed(2)}€`; // Promedio Bruto
+        }
+      };
+
+      // Event listener para inputs de movimientos
+      card.querySelectorAll('.movimientos-input').forEach(input => {
+        input.addEventListener('input', (e) => {
+          const movimientos = parseFloat(e.target.value) || 0;
+          const jornalIndex = parseInt(e.target.dataset.jornalIndex);
+          const jornal = jornalesConSalarioQuincena[jornalIndex];
+          const row = e.target.closest('tr');
+
+          // Recalcular prima según movimientos
+          let nuevaPrima = 0;
+          const salarioInfo = tablaSalarial.find(s => s.clave_jornada === jornal.clave_jornada);
+
+          if (salarioInfo && jornal.tipo_operativa === 'Contenedor') {
+            // A partir de 120 movimientos (>=120) se usa coef_mayor
+            if (movimientos < 120) {
+              nuevaPrima = movimientos * salarioInfo.coef_prima_menor120;
+            } else {
+              nuevaPrima = movimientos * salarioInfo.coef_prima_mayor120;
+            }
+          }
+
+          const nuevoTotal = jornal.salario_base + nuevaPrima;
+          const nuevoNeto = nuevoTotal * (1 - irpfPorcentaje / 100);
+
+          // Actualizar la fila con animación
+          row.classList.add('updating');
+          setTimeout(() => row.classList.remove('updating'), 600);
+
+          // Actualizar el input de prima también
+          const primaInput = row.querySelector('.prima-input');
+          if (primaInput) primaInput.value = nuevaPrima.toFixed(2);
+
+          row.querySelector('.bruto-value strong').textContent = `${nuevoTotal.toFixed(2)}€`;
+          row.querySelector('.neto-value strong').textContent = `${nuevoNeto.toFixed(2)}€`;
+
+          // Actualizar el jornal en el array
+          jornal.prima = nuevaPrima;
+          jornal.total = nuevoTotal;
+
+          actualizarTotales();
+        });
+      });
+
+      // Event listener para inputs de prima
+      card.querySelectorAll('.prima-input').forEach(input => {
+        input.addEventListener('input', (e) => {
+          const nuevaPrima = parseFloat(e.target.value) || 0;
+          const jornalIndex = parseInt(e.target.dataset.jornalIndex);
+          const jornal = jornalesConSalarioQuincena[jornalIndex];
+          const row = e.target.closest('tr');
+
+          const nuevoTotal = jornal.salario_base + nuevaPrima;
+          const nuevoNeto = nuevoTotal * (1 - irpfPorcentaje / 100);
+
+          // Actualizar la fila con animación
+          row.classList.add('updating');
+          setTimeout(() => row.classList.remove('updating'), 600);
+
+          row.querySelector('.bruto-value strong').textContent = `${nuevoTotal.toFixed(2)}€`;
+          row.querySelector('.neto-value strong').textContent = `${nuevoNeto.toFixed(2)}€`;
+
+          // Actualizar el jornal en el array
+          jornal.prima = nuevaPrima;
+          jornal.total = nuevoTotal;
+
+          actualizarTotales();
+        });
+      });
+    });
+
+    // Event listener para cambios en IRPF
+    if (irpfInput) {
+      irpfInput.addEventListener('change', (e) => {
+        const nuevoIRPF = parseFloat(e.target.value) || 0;
+
+        // Validar rango (0-50%)
+        if (nuevoIRPF < 0 || nuevoIRPF > 50) {
+          alert('El porcentaje de IRPF debe estar entre 0% y 50%');
+          e.target.value = irpfPorcentaje;
+          return;
+        }
+
+        // Guardar en localStorage
+        localStorage.setItem(irpfKey, nuevoIRPF.toString());
+        irpfPorcentaje = nuevoIRPF;
+
+        console.log(`💰 IRPF actualizado a ${nuevoIRPF}%`);
+
+        // Actualizar todos los valores neto sin recargar la página
+        // 1. Actualizar estadísticas globales
+        const totalGlobalBruto = jornalesConSalario.reduce((sum, j) => sum + j.total, 0);
+        const totalGlobalNeto = totalGlobalBruto * (1 - irpfPorcentaje / 100);
+
+        const statCards = stats.querySelectorAll('.stat-card .stat-value');
+        if (statCards.length >= 3) {
+          statCards[2].textContent = `${totalGlobalNeto.toFixed(2)}€`; // Total Neto
+          // Actualizar label con nuevo %
+          const netoLabel = stats.querySelectorAll('.stat-card .stat-label')[2];
+          if (netoLabel) netoLabel.textContent = `Total Neto (${irpfPorcentaje}% IRPF)`;
+        }
+
+        // 2. Actualizar todas las filas de jornales y totales de quincena
+        document.querySelectorAll('.quincena-card').forEach(card => {
+          // Actualizar todas las filas de la tabla
+          card.querySelectorAll('tbody tr').forEach(row => {
+            const brutoElement = row.querySelector('.bruto-value strong');
+            if (brutoElement) {
+              const bruto = parseFloat(brutoElement.textContent.replace('€', ''));
+              const neto = bruto * (1 - irpfPorcentaje / 100);
+              const netoElement = row.querySelector('.neto-value strong');
+              if (netoElement) {
+                netoElement.textContent = `${neto.toFixed(2)}€`;
+              }
+            }
+          });
+
+          // Actualizar totales de la quincena en el header
+          const brutoValueElement = card.querySelector('.quincena-total .bruto-value');
+          if (brutoValueElement) {
+            const totalBruto = parseFloat(brutoValueElement.textContent.replace('€', ''));
+            const totalNeto = totalBruto * (1 - irpfPorcentaje / 100);
+            const netoValueElement = card.querySelector('.quincena-total .neto-value');
+            if (netoValueElement) {
+              netoValueElement.textContent = `${totalNeto.toFixed(2)}€`;
+            }
+          }
+        });
+      });
+    }
+
+  } catch (error) {
+    console.error('❌ Error cargando Sueldómetro:', error);
+    content.innerHTML = `
+      <div class="error-state">
+        <div class="error-icon">⚠️</div>
+        <h3>Error al cargar datos</h3>
+        <p>${error.message}</p>
+      </div>
+    `;
+  } finally {
+    loading.classList.add('hidden');
+  }
+}
+
 
 
 
