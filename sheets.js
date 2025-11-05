@@ -22,9 +22,15 @@ const SHEETS_CONFIG = {
   GID_JORNALES_HISTORICO_ACUMULADO: '1604874350',  // Pestaña: Jornales_Historico_Acumulado (HISTÓRICO ROBUSTO)
   GID_CONTRATACION: '1304645770',  // Pestaña: Contrata_Glide
   GID_PUERTAS: '1650839211',       // Pestaña: Puertas (No se usa, getPuertas usa URL hardcodeada)
+  GID_MAPEO_PUESTOS: '418043978',  // Pestaña: MAPEO_PUESTOS (Para Sueldómetro)
+  GID_TABLA_SALARIOS: '1710373929', // Pestaña: TABLA_SALARIOS (Para Sueldómetro)
 
   // URL de la hoja "censo_limpio"
-  URL_CENSO_LIMPIO: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTcJ5Irxl93zwDqehuLW7-MsuVtphRDtmF8Rwp-yueqcAYRfgrTtEdKDwX8WKkJj1m0rVJc8AncGN_A/pub?gid=1216182924&single=true&output=csv'
+  URL_CENSO_LIMPIO: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTcJ5Irxl93zwDqehuLW7-MsuVtphRDtmF8Rwp-yueqcAYRfgrTtEdKDwX8WKkJj1m0rVJc8AncGN_A/pub?gid=1216182924&single=true&output=csv',
+
+  // URLs del Sueldómetro (Añadidas para que las funciones las usen)
+  URL_MAPEO_PUESTOS: 'https://docs.google.com/spreadsheets/d/1j-IaOHXoLEP4bK2hjdn2uAYy8a2chqiQSOw4Nfxoyxc/export?format=csv&gid=418043978',
+  URL_TABLA_SALARIOS: 'https://docs.google.com/spreadsheets/d/1j-IaOHXoLEP4bK2hjdn2uAYy8a2chqiQSOw4Nfxoyxc/export?format=csv&gid=1710373929'
 };
 
 /**
@@ -535,14 +541,17 @@ const SheetsAPI = {
 
       // Obtener puertas
       const puertasResult = await this.getPuertas();
-      const puertas = puertasResult.puertas; 
+      const puertas = puertasResult.puertas;
 
-      // Separar puertas SP y OC
-      const puertasSP = puertas
+      // Filtrar SOLO puertas laborables (excluir Festivo) para el cálculo
+      const puertasLaborables = puertas.filter(p => p.jornada !== 'Festivo');
+
+      // Separar puertas SP y OC (solo laborables)
+      const puertasSP = puertasLaborables
         .map(p => parseInt(p.puertaSP))
         .filter(n => !isNaN(n) && n > 0);
 
-      const puertasOC = puertas
+      const puertasOC = puertasLaborables
         .map(p => parseInt(p.puertaOC))
         .filter(n => !isNaN(n) && n > 0);
 
@@ -1082,6 +1091,84 @@ const SheetsAPI = {
   },
 
   /**
+   * [ROBUSTO] Obtiene el mapeo de puestos (Puesto → Grupo_Salarial + Tipo_Operativa)
+   * Para el Sueldómetro
+   * Columnas esperadas: Puesto, Grupo_Salarial, Tipo_Operativa
+   */
+  async getMapeoPuestos() {
+    try {
+      const data = await fetchSheetData(SHEETS_CONFIG.SHEET_ID, SHEETS_CONFIG.GID_MAPEO_PUESTOS);
+
+      console.log('📋 Datos raw de mapeo_puestos:', data.slice(0, 3)); // Primeros 3 registros
+
+      // Mapear los datos con las columnas esperadas
+      const mapeo = data.map(row => {
+        let grupoSalarial = row.Grupo_Salarial || row.grupo_salarial || '';
+
+        // Normalizar "Grupo 1" → "G1", "Grupo 2" → "G2"
+        if (grupoSalarial.includes('1')) grupoSalarial = 'G1';
+        else if (grupoSalarial.includes('2')) grupoSalarial = 'G2';
+
+        return {
+          puesto: row.Puesto || row.puesto || '',
+          grupo_salarial: grupoSalarial,
+          tipo_operativa: row.Tipo_Operativa || row.tipo_operativa || ''
+        };
+      }).filter(item => item.puesto && item.grupo_salarial && item.tipo_operativa);
+
+      console.log(`✅ Mapeo de puestos cargado: ${mapeo.length} registros`);
+      if (mapeo.length > 0) {
+        console.log('📝 Ejemplo de mapeo:', mapeo[0]);
+      }
+      return mapeo;
+
+    } catch (error) {
+      console.error('❌ Error obteniendo mapeo de puestos:', error);
+      return [];
+    }
+  },
+
+  /**
+   * [ROBUSTO] Obtiene la tabla salarial (Clave_Jornada → Salarios base y primas)
+   * Para el Sueldómetro
+   * Columnas esperadas: Clave_Jornada, Jornal_Base_G1, Jornal_Base_G2, Prima_Minima_Coches, Coef_Prima_Mayor120
+   */
+  async getTablaSalarial() {
+    try {
+      const data = await fetchSheetData(SHEETS_CONFIG.SHEET_ID, SHEETS_CONFIG.GID_TABLA_SALARIOS);
+
+      console.log('📋 Datos raw de tabla_salarios:', data.slice(0, 3)); // Primeros 3 registros
+
+      // Función auxiliar para parsear números europeos (coma decimal)
+      const parseEuropeanFloat = (value) => {
+        if (!value) return 0;
+        const str = value.toString().replace(',', '.');
+        return parseFloat(str) || 0;
+      };
+
+      // Mapear los datos con las columnas esperadas
+      const tablaSalarial = data.map(row => ({
+        clave_jornada: row.Clave_Jornada || row.clave_jornada || '',
+        jornal_base_g1: parseEuropeanFloat(row.Jornal_Base_G1 || row.jornal_base_g1),
+        jornal_base_g2: parseEuropeanFloat(row.Jornal_Base_G2 || row.jornal_base_g2),
+        prima_minima_coches: parseEuropeanFloat(row.Prima_Minima_Coches || row.prima_minima_coches),
+        coef_prima_menor120: parseEuropeanFloat(row.Coef_Prima_Menor120 || row.coef_prima_menor120),
+        coef_prima_mayor120: parseEuropeanFloat(row.Coef_Prima_Mayor120 || row.coef_prima_mayor120)
+      })).filter(item => item.clave_jornada);
+
+      console.log(`✅ Tabla salarial cargada: ${tablaSalarial.length} registros`);
+      if (tablaSalarial.length > 0) {
+        console.log('📝 Ejemplo de tabla salarial:', tablaSalarial[0]);
+      }
+      return tablaSalarial;
+
+    } catch (error) {
+      console.error('❌ Error obteniendo tabla salarial:', error);
+      return [];
+    }
+  },
+
+  /**
    * Datos mock para puertas (fallback)
    */
   getMockPuertas() {
@@ -1154,3 +1241,4 @@ function clearSheetsCache() {
 // Exponer API globalmente
 window.SheetsAPI = SheetsAPI;
 window.clearSheetsCache = clearSheetsCache;
+
