@@ -3,7 +3,7 @@
  * Permite que la app funcione offline y se cargue más rápido
  */
 
-const CACHE_NAME = 'estiba-vlc-v2';
+const CACHE_NAME = 'estiba-vlc-v1';
 const urlsToCache = [
   './',
   './index.html',
@@ -127,4 +127,3 @@ self.addEventListener('message', event => {
     self.skipWaiting();
   }
 });
-

@@ -13,6 +13,7 @@ const AppState = {
 // Datos estáticos - Enlaces actualizados con URLs reales
 const ENLACES_DATA = [
   // Formularios
+  { titulo: 'Reportar Jornal Faltante', url: '#', categoria: 'Formularios', color: 'blue', modal: 'report-jornal' },
   { titulo: 'Punto y HS', url: 'https://docs.google.com/forms/d/e/1FAIpQLSeGKl5gwKrcj110D_6xhHVo0bn7Fo56tneof68dRyS6xUrD7Q/viewform', categoria: 'Formularios', color: 'blue' },
   { titulo: 'Cambio Posición', url: 'https://docs.google.com/forms/d/e/1FAIpQLSe6V16kccSmyBAYCkDNphYAbD7dqe4ydHbVWu_zpXvnFFFxlA/viewform', categoria: 'Formularios', color: 'blue' },
   { titulo: 'Cambio IRPF', url: 'https://docs.google.com/forms/d/e/1FAIpQLSfDe2o5X_Bge14GA-bSBPRL7zpB2ZW_isBGGVFGAyvGkSAomQ/viewform', categoria: 'Formularios', color: 'blue' },
@@ -908,7 +909,7 @@ async function loadContratacion() {
 
       localStorage.setItem('jornales_historico', JSON.stringify(historico));
       console.log(`💾 Histórico actualizado: ${historico.length} jornales totales`);
-/*
+
       // Sincronizar con Google Sheets (background)
       try {
         await SheetsAPI.sincronizarJornalesBackup(AppState.currentUser, historico.filter(h => h.chapa === AppState.currentUser));
@@ -916,7 +917,6 @@ async function loadContratacion() {
       } catch (syncError) {
         console.warn('⚠️ Sincronización fallida:', syncError);
       }
-      */
     }
 
     // 6. ORDENAR Y MOSTRAR
@@ -1407,7 +1407,10 @@ function createQuincenaCard(year, month, quincena, jornales) {
             ${jornales.map(row => `
               <tr>
                 <td style="white-space: nowrap;"><strong>${row.fecha}</strong></td>
-                <td style="white-space: nowrap;">${row.puesto}</td>
+                <td style="white-space: nowrap;">
+                  ${row.puesto}
+                  ${row.manual ? '<span class="badge-manual" title="Añadido manualmente">Manual</span>' : ''}
+                </td>
                 <td style="white-space: nowrap;">${row.jornada}</td>
                 <td style="white-space: nowrap;">${row.empresa}</td>
                 <td style="white-space: nowrap;">${row.buque}</td>
@@ -1785,8 +1788,22 @@ function renderEnlaces() {
       a.href = enlace.url;
       a.className = `enlace-btn ${enlace.color}`;
       a.textContent = enlace.titulo;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
+
+      // Si tiene modal, abrir modal en lugar de link externo
+      if (enlace.modal) {
+        a.href = '#';
+        a.addEventListener('click', (e) => {
+          e.preventDefault();
+          const modal = document.getElementById(`${enlace.modal}-modal`);
+          if (modal) {
+            modal.style.display = 'flex';
+          }
+        });
+      } else {
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+      }
+
       grid.appendChild(a);
     });
 
@@ -2268,6 +2285,9 @@ async function loadSueldometro() {
   // Cargar IRPF guardado o usar valor por defecto (15%)
   const irpfKey = `irpf_${AppState.currentUser}`;
   let irpfPorcentaje = parseFloat(localStorage.getItem(irpfKey)) || 15;
+
+  console.log(`💰 IRPF cargado: ${irpfPorcentaje}% (clave: ${irpfKey})`);
+
   if (irpfInput) {
     irpfInput.value = irpfPorcentaje;
   }
@@ -2761,64 +2781,77 @@ async function loadSueldometro() {
       });
     });
 
-    // Event listener para cambios en IRPF
-    if (irpfInput) {
-      irpfInput.addEventListener('change', (e) => {
-        const nuevoIRPF = parseFloat(e.target.value) || 0;
+    // Función para actualizar IRPF y persistir en localStorage
+    const actualizarIRPF = (e) => {
+      const nuevoIRPF = parseFloat(e.target.value) || 0;
 
-        // Validar rango (0-50%)
-        if (nuevoIRPF < 0 || nuevoIRPF > 50) {
-          alert('El porcentaje de IRPF debe estar entre 0% y 50%');
-          e.target.value = irpfPorcentaje;
-          return;
-        }
+      // Validar rango (0-50%)
+      if (nuevoIRPF < 0 || nuevoIRPF > 50) {
+        alert('El porcentaje de IRPF debe estar entre 0% y 50%');
+        e.target.value = irpfPorcentaje;
+        return;
+      }
 
-        // Guardar en localStorage
-        localStorage.setItem(irpfKey, nuevoIRPF.toString());
-        irpfPorcentaje = nuevoIRPF;
+      // No hacer nada si el valor no cambió
+      if (nuevoIRPF === irpfPorcentaje) {
+        return;
+      }
 
-        console.log(`💰 IRPF actualizado a ${nuevoIRPF}%`);
+      // Guardar en localStorage
+      localStorage.setItem(irpfKey, nuevoIRPF.toString());
+      irpfPorcentaje = nuevoIRPF;
 
-        // Actualizar todos los valores neto sin recargar la página
-        // 1. Actualizar estadísticas globales
-        const totalGlobalBruto = jornalesConSalario.reduce((sum, j) => sum + j.total, 0);
-        const totalGlobalNeto = totalGlobalBruto * (1 - irpfPorcentaje / 100);
+      console.log(`💰 IRPF actualizado y guardado: ${nuevoIRPF}%`);
+      console.log(`💾 Guardado en localStorage con clave: ${irpfKey}`);
 
-        const statCards = stats.querySelectorAll('.stat-card .stat-value');
-        if (statCards.length >= 3) {
-          statCards[2].textContent = `${totalGlobalNeto.toFixed(2)}€`; // Total Neto
-          // Actualizar label con nuevo %
-          const netoLabel = stats.querySelectorAll('.stat-card .stat-label')[2];
-          if (netoLabel) netoLabel.textContent = `Total Neto (${irpfPorcentaje}% IRPF)`;
-        }
+      // Actualizar todos los valores neto sin recargar la página
+      // 1. Actualizar estadísticas globales
+      const totalGlobalBruto = jornalesConSalario.reduce((sum, j) => sum + j.total, 0);
+      const totalGlobalNeto = totalGlobalBruto * (1 - irpfPorcentaje / 100);
 
-        // 2. Actualizar todas las filas de jornales y totales de quincena
-        document.querySelectorAll('.quincena-card').forEach(card => {
-          // Actualizar todas las filas de la tabla
-          card.querySelectorAll('tbody tr').forEach(row => {
-            const brutoElement = row.querySelector('.bruto-value strong');
-            if (brutoElement) {
-              const bruto = parseFloat(brutoElement.textContent.replace('€', ''));
-              const neto = bruto * (1 - irpfPorcentaje / 100);
-              const netoElement = row.querySelector('.neto-value strong');
-              if (netoElement) {
-                netoElement.textContent = `${neto.toFixed(2)}€`;
-              }
-            }
-          });
+      const statCards = stats.querySelectorAll('.stat-card .stat-value');
+      if (statCards.length >= 3) {
+        statCards[2].textContent = `${totalGlobalNeto.toFixed(2)}€`; // Total Neto
+        // Actualizar label con nuevo %
+        const netoLabel = stats.querySelectorAll('.stat-card .stat-label')[2];
+        if (netoLabel) netoLabel.textContent = `Total Neto (${irpfPorcentaje}% IRPF)`;
+      }
 
-          // Actualizar totales de la quincena en el header
-          const brutoValueElement = card.querySelector('.quincena-total .bruto-value');
-          if (brutoValueElement) {
-            const totalBruto = parseFloat(brutoValueElement.textContent.replace('€', ''));
-            const totalNeto = totalBruto * (1 - irpfPorcentaje / 100);
-            const netoValueElement = card.querySelector('.quincena-total .neto-value');
-            if (netoValueElement) {
-              netoValueElement.textContent = `${totalNeto.toFixed(2)}€`;
+      // 2. Actualizar todas las filas de jornales y totales de quincena
+      document.querySelectorAll('.quincena-card').forEach(card => {
+        // Actualizar todas las filas de la tabla
+        card.querySelectorAll('tbody tr').forEach(row => {
+          const brutoElement = row.querySelector('.bruto-value strong');
+          if (brutoElement) {
+            const bruto = parseFloat(brutoElement.textContent.replace('€', ''));
+            const neto = bruto * (1 - irpfPorcentaje / 100);
+            const netoElement = row.querySelector('.neto-value strong');
+            if (netoElement) {
+              netoElement.textContent = `${neto.toFixed(2)}€`;
             }
           }
         });
+
+        // Actualizar totales de la quincena en el header
+        const brutoValueElement = card.querySelector('.quincena-total .bruto-value');
+        if (brutoValueElement) {
+          const totalBruto = parseFloat(brutoValueElement.textContent.replace('€', ''));
+          const totalNeto = totalBruto * (1 - irpfPorcentaje / 100);
+          const netoValueElement = card.querySelector('.quincena-total .neto-value');
+          if (netoValueElement) {
+            netoValueElement.textContent = `${totalNeto.toFixed(2)}€`;
+          }
+        }
       });
+    };
+
+    // Event listeners para cambios en IRPF
+    if (irpfInput) {
+      // Evento 'change' - cuando el usuario presiona Enter o cambia de campo
+      irpfInput.addEventListener('change', actualizarIRPF);
+
+      // Evento 'blur' - cuando el usuario sale del input (más robusto)
+      irpfInput.addEventListener('blur', actualizarIRPF);
     }
 
   } catch (error) {
@@ -2835,9 +2868,318 @@ async function loadSueldometro() {
   }
 }
 
+/**
+ * Inicializar funcionalidad de añadir jornal manual
+ */
+function initAddJornalManual() {
+  const addBtn = document.getElementById('add-jornal-btn');
+  const modal = document.getElementById('add-jornal-modal');
+  const closeBtn = document.getElementById('close-jornal-modal');
+  const cancelBtn = document.getElementById('cancel-jornal');
+  const saveBtn = document.getElementById('save-jornal');
 
+  const fechaInput = document.getElementById('jornal-fecha');
+  const jornadaSelect = document.getElementById('jornal-jornada');
+  const puestoSelect = document.getElementById('jornal-puesto');
+  const puestoOtroGroup = document.getElementById('jornal-puesto-otro-group');
+  const puestoOtroInput = document.getElementById('jornal-puesto-otro');
+  const empresaInput = document.getElementById('jornal-empresa');
+  const buqueInput = document.getElementById('jornal-buque');
+  const parteInput = document.getElementById('jornal-parte');
 
+  const errorMsg = document.getElementById('jornal-error');
+  const successMsg = document.getElementById('jornal-success');
 
+  if (!addBtn || !modal) return;
+
+  // Abrir modal
+  addBtn.addEventListener('click', () => {
+    modal.style.display = 'flex';
+    // Limpiar formulario
+    fechaInput.value = '';
+    jornadaSelect.value = '';
+    puestoSelect.value = '';
+    puestoOtroGroup.style.display = 'none';
+    puestoOtroInput.value = '';
+    empresaInput.value = '';
+    buqueInput.value = '';
+    parteInput.value = '';
+    errorMsg.textContent = '';
+    errorMsg.style.display = 'none';
+    successMsg.textContent = '';
+    successMsg.style.display = 'none';
+  });
+
+  // Cerrar modal
+  const cerrarModal = () => {
+    modal.style.display = 'none';
+  };
+
+  closeBtn.addEventListener('click', cerrarModal);
+  cancelBtn.addEventListener('click', cerrarModal);
+
+  // Cerrar al hacer clic fuera del modal
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) cerrarModal();
+  });
+
+  // Mostrar/ocultar campo "Otro puesto"
+  puestoSelect.addEventListener('change', () => {
+    if (puestoSelect.value === 'otro') {
+      puestoOtroGroup.style.display = 'block';
+    } else {
+      puestoOtroGroup.style.display = 'none';
+    }
+  });
+
+  // Guardar jornal
+  saveBtn.addEventListener('click', async () => {
+    errorMsg.style.display = 'none';
+    successMsg.style.display = 'none';
+
+    // Validar campos obligatorios
+    if (!fechaInput.value || !jornadaSelect.value || !puestoSelect.value || !empresaInput.value) {
+      errorMsg.textContent = 'Por favor, completa todos los campos obligatorios (*)';
+      errorMsg.style.display = 'block';
+      return;
+    }
+
+    // Obtener puesto final
+    let puestoFinal = puestoSelect.value;
+    if (puestoFinal === 'otro') {
+      if (!puestoOtroInput.value.trim()) {
+        errorMsg.textContent = 'Por favor, especifica el puesto';
+        errorMsg.style.display = 'block';
+        return;
+      }
+      puestoFinal = puestoOtroInput.value.trim();
+    }
+
+    // Formatear fecha a DD/MM/YYYY
+    const fechaParts = fechaInput.value.split('-'); // YYYY-MM-DD
+    const fechaFormateada = `${fechaParts[2]}/${fechaParts[1]}/${fechaParts[0]}`;
+
+    // Crear objeto jornal
+    const nuevoJornal = {
+      fecha: fechaFormateada,
+      jornada: jornadaSelect.value,
+      puesto: puestoFinal,
+      empresa: empresaInput.value.trim(),
+      buque: buqueInput.value.trim() || '--',
+      parte: parteInput.value || '1',
+      manual: true // Marcar como añadido manualmente
+    };
+
+    console.log('💾 Guardando jornal manual:', nuevoJornal);
+
+    try {
+      // Guardar en localStorage
+      let historico = JSON.parse(localStorage.getItem('jornales_historico') || '[]');
+
+      // Verificar duplicados
+      const existe = historico.some(j =>
+        j.fecha === nuevoJornal.fecha &&
+        j.jornada === nuevoJornal.jornada &&
+        j.puesto === nuevoJornal.puesto
+      );
+
+      if (existe) {
+        errorMsg.textContent = 'Ya existe un jornal con estos datos';
+        errorMsg.style.display = 'block';
+        return;
+      }
+
+      // Añadir nuevo jornal
+      historico.push(nuevoJornal);
+
+      // Ordenar por fecha (más recientes primero)
+      historico.sort((a, b) => {
+        const [dA, mA, yA] = a.fecha.split('/');
+        const [dB, mB, yB] = b.fecha.split('/');
+        const dateA = new Date(yA, mA - 1, dA);
+        const dateB = new Date(yB, mB - 1, dB);
+        return dateB - dateA;
+      });
+
+      // Guardar en localStorage
+      localStorage.setItem('jornales_historico', JSON.stringify(historico));
+
+      console.log('✅ Jornal guardado correctamente');
+
+      // Mostrar mensaje de éxito
+      successMsg.textContent = '✅ Jornal añadido correctamente';
+      successMsg.style.display = 'block';
+
+      // Recargar automáticamente las vistas
+      setTimeout(async () => {
+        // Recargar Mis Jornales si estamos en esa página
+        if (document.getElementById('page-jornales').classList.contains('active')) {
+          await loadJornales();
+        }
+
+        cerrarModal();
+      }, 1500);
+
+    } catch (error) {
+      console.error('❌ Error guardando jornal:', error);
+      errorMsg.textContent = 'Error al guardar el jornal. Inténtalo de nuevo.';
+      errorMsg.style.display = 'block';
+    }
+  });
+}
+
+/**
+ * Inicializa el modal para reportar jornales faltantes
+ */
+function initReportJornal() {
+  const modal = document.getElementById('report-jornal-modal');
+  const closeBtn = document.getElementById('close-report-modal');
+  const cancelBtn = document.getElementById('cancel-report');
+  const sendBtn = document.getElementById('send-report');
+
+  const chapaInput = document.getElementById('report-chapa');
+  const fechaInput = document.getElementById('report-fecha');
+  const puestoSelect = document.getElementById('report-puesto');
+  const puestoOtroGroup = document.getElementById('report-puesto-otro-group');
+  const puestoOtroInput = document.getElementById('report-puesto-otro');
+  const jornadaSelect = document.getElementById('report-jornada');
+  const empresaInput = document.getElementById('report-empresa');
+  const buqueInput = document.getElementById('report-buque');
+  const parteInput = document.getElementById('report-parte');
+
+  const errorMsg = document.getElementById('report-error');
+  const successMsg = document.getElementById('report-success');
+
+  if (!modal) return;
+
+  // Llenar chapa del usuario actual
+  const fillChapa = () => {
+    if (AppState.currentUser && chapaInput) {
+      chapaInput.value = AppState.currentUser;
+    }
+  };
+
+  // Mostrar campo "otro" si se selecciona
+  puestoSelect.addEventListener('change', () => {
+    if (puestoSelect.value === 'otro') {
+      puestoOtroGroup.style.display = 'block';
+      puestoOtroInput.required = true;
+    } else {
+      puestoOtroGroup.style.display = 'none';
+      puestoOtroInput.required = false;
+      puestoOtroInput.value = '';
+    }
+  });
+
+  // Cerrar modal
+  const cerrarModal = () => {
+    modal.style.display = 'none';
+    // Limpiar formulario
+    fechaInput.value = '';
+    puestoSelect.value = '';
+    puestoOtroGroup.style.display = 'none';
+    puestoOtroInput.value = '';
+    jornadaSelect.value = '';
+    empresaInput.value = '';
+    buqueInput.value = '';
+    parteInput.value = '1';
+    errorMsg.style.display = 'none';
+    successMsg.style.display = 'none';
+  };
+
+  closeBtn.addEventListener('click', cerrarModal);
+  cancelBtn.addEventListener('click', cerrarModal);
+
+  // Cerrar al hacer click fuera del modal
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      cerrarModal();
+    }
+  });
+
+  // Cuando se abre el modal, llenar la chapa
+  const observer = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      if (mutation.attributeName === 'style') {
+        if (modal.style.display === 'flex') {
+          fillChapa();
+        }
+      }
+    });
+  });
+
+  observer.observe(modal, { attributes: true });
+
+  // Enviar reporte
+  sendBtn.addEventListener('click', async () => {
+    errorMsg.style.display = 'none';
+    successMsg.style.display = 'none';
+
+    // Validar campos requeridos
+    if (!fechaInput.value || !chapaInput.value || !puestoSelect.value ||
+        !jornadaSelect.value || !empresaInput.value || !parteInput.value) {
+      errorMsg.textContent = 'Por favor, completa todos los campos obligatorios (*)';
+      errorMsg.style.display = 'block';
+      return;
+    }
+
+    // Determinar puesto final
+    let puestoFinal = puestoSelect.value;
+    if (puestoSelect.value === 'otro') {
+      if (!puestoOtroInput.value.trim()) {
+        errorMsg.textContent = 'Por favor, especifica el puesto';
+        errorMsg.style.display = 'block';
+        return;
+      }
+      puestoFinal = puestoOtroInput.value.trim();
+    }
+
+    // Formatear fecha a DD/MM/YYYY
+    const [year, month, day] = fechaInput.value.split('-');
+    const fechaFormateada = `${day}/${month}/${year}`;
+
+    // Crear cuerpo del email en formato tabular (separado por tabulaciones)
+    const emailSubject = `Jornal Faltante - Chapa ${chapaInput.value}`;
+    const emailBody = `Jornal Faltante Reportado:
+
+Fecha\tChapa\tPuesto_Contratacion\tJornada\tEmpresa\tBuque\tParte
+${fechaFormateada}\t${chapaInput.value}\t${puestoFinal}\t${jornadaSelect.value}\t${empresaInput.value.trim()}\t${buqueInput.value.trim() || '--'}\t${parteInput.value}
+
+---
+Para copiar a la hoja de cálculo:
+${fechaFormateada}\t${chapaInput.value}\t${puestoFinal}\t${jornadaSelect.value}\t${empresaInput.value.trim()}\t${buqueInput.value.trim() || '--'}\t${parteInput.value}
+
+Enviado desde Portal Estiba VLC`;
+
+    try {
+      // Crear enlace mailto
+      const mailtoLink = `mailto:your-email@example.com?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
+
+      // Abrir cliente de correo
+      window.location.href = mailtoLink;
+
+      // Mostrar mensaje de éxito
+      successMsg.textContent = '✅ Se ha abierto tu cliente de correo. Por favor, envía el email.';
+      successMsg.style.display = 'block';
+
+      // Cerrar modal después de 3 segundos
+      setTimeout(() => {
+        cerrarModal();
+      }, 3000);
+
+    } catch (error) {
+      console.error('❌ Error creando email:', error);
+      errorMsg.textContent = 'Error al crear el email. Inténtalo de nuevo.';
+      errorMsg.style.display = 'block';
+    }
+  });
+}
+
+// Inicializar al cargar el DOM
+document.addEventListener('DOMContentLoaded', () => {
+  initAddJornalManual();
+  initReportJornal();
+});
 
 
 
