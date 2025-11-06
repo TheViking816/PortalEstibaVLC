@@ -908,7 +908,7 @@ async function loadContratacion() {
 
       localStorage.setItem('jornales_historico', JSON.stringify(historico));
       console.log(`💾 Histórico actualizado: ${historico.length} jornales totales`);
-
+/*
       // Sincronizar con Google Sheets (background)
       try {
         await SheetsAPI.sincronizarJornalesBackup(AppState.currentUser, historico.filter(h => h.chapa === AppState.currentUser));
@@ -916,6 +916,7 @@ async function loadContratacion() {
       } catch (syncError) {
         console.warn('⚠️ Sincronización fallida:', syncError);
       }
+      */
     }
 
     // 6. ORDENAR Y MOSTRAR
@@ -2833,6 +2834,7 @@ async function loadSueldometro() {
     loading.classList.add('hidden');
   }
 }
+
 
 
 
