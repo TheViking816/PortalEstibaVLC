@@ -1406,10 +1406,7 @@ function createQuincenaCard(year, month, quincena, jornales) {
             ${jornales.map(row => `
               <tr>
                 <td style="white-space: nowrap;"><strong>${row.fecha}</strong></td>
-                <td style="white-space: nowrap;">
-                  ${row.puesto}
-                  ${row.manual ? '<span class="badge-manual" title="Añadido manualmente">Manual</span>' : ''}
-                </td>
+                <td style="white-space: nowrap;">${row.puesto}</td>
                 <td style="white-space: nowrap;">${row.jornada}</td>
                 <td style="white-space: nowrap;">${row.empresa}</td>
                 <td style="white-space: nowrap;">${row.buque}</td>
@@ -2270,53 +2267,19 @@ async function loadSueldometro() {
   // Cargar IRPF guardado o usar valor por defecto (15%)
   const irpfKey = `irpf_${AppState.currentUser}`;
   let irpfPorcentaje = parseFloat(localStorage.getItem(irpfKey)) || 15;
-
-  console.log(`💰 IRPF cargado: ${irpfPorcentaje}% (clave: ${irpfKey})`);
-
   if (irpfInput) {
     irpfInput.value = irpfPorcentaje;
   }
 
   try {
-    // 1. Cargar datos de Mapeo y Salarios
+    // 1. Cargar datos necesarios
     console.log('📊 Cargando datos del Sueldómetro...');
 
-    const [mapeoPuestos, tablaSalarial] = await Promise.all([
+    const [jornales, mapeoPuestos, tablaSalarial] = await Promise.all([
+      SheetsAPI.getJornalesHistoricoAcumulado(AppState.currentUser),
       SheetsAPI.getMapeoPuestos(),
       SheetsAPI.getTablaSalarial()
     ]);
-
-    // 2. Cargar Jornales con fallback (LÓGICA AÑADIDA)
-    let jornales = [];
-    try {
-        const jornalesAcumulados = await SheetsAPI.getJornalesHistoricoAcumulado(AppState.currentUser);
-
-        if (jornalesAcumulados && jornalesAcumulados.length > 0) {
-            console.log(`✅ Sueldómetro: Cargados ${jornalesAcumulados.length} jornales desde histórico`);
-            jornales = jornalesAcumulados;
-        } else {
-            throw new Error('Sueldómetro: No hay jornales en histórico, usando localStorage');
-        }
-    } catch (error) {
-        console.warn(error.message);
-        console.log('📂 Sueldómetro: Cargando desde localStorage como fallback...');
-        let historico = JSON.parse(localStorage.getItem('jornales_historico') || '[]');
-        
-        // (Recomendado) Añadir la limpieza de año que también está en loadJornales
-        const ahora = new Date();
-        const añoActual = ahora.getFullYear();
-        historico = historico.filter(jornal => {
-          try {
-            const fechaParts = jornal.fecha.split('/');
-            const añoJornal = parseInt(fechaParts[2]);
-            return añoJornal === añoActual;
-          } catch { return true; }
-        });
-        
-        jornales = historico.filter(item => item.chapa === AppState.currentUser);
-        console.log(`📂 Sueldómetro: Cargados ${jornales.length} jornales desde localStorage`);
-    }
-    // FIN DE LA LÓGICA AÑADIDA
 
     console.log(`✅ Datos cargados: ${jornales.length} jornales, ${mapeoPuestos.length} puestos, ${tablaSalarial.length} salarios`);
 
@@ -2797,77 +2760,64 @@ async function loadSueldometro() {
       });
     });
 
-    // Función para actualizar IRPF y persistir en localStorage
-    const actualizarIRPF = (e) => {
-      const nuevoIRPF = parseFloat(e.target.value) || 0;
+    // Event listener para cambios en IRPF
+    if (irpfInput) {
+      irpfInput.addEventListener('change', (e) => {
+        const nuevoIRPF = parseFloat(e.target.value) || 0;
 
-      // Validar rango (0-50%)
-      if (nuevoIRPF < 0 || nuevoIRPF > 50) {
-        alert('El porcentaje de IRPF debe estar entre 0% y 50%');
-        e.target.value = irpfPorcentaje;
-        return;
-      }
+        // Validar rango (0-50%)
+        if (nuevoIRPF < 0 || nuevoIRPF > 50) {
+          alert('El porcentaje de IRPF debe estar entre 0% y 50%');
+          e.target.value = irpfPorcentaje;
+          return;
+        }
 
-      // No hacer nada si el valor no cambió
-      if (nuevoIRPF === irpfPorcentaje) {
-        return;
-      }
+        // Guardar en localStorage
+        localStorage.setItem(irpfKey, nuevoIRPF.toString());
+        irpfPorcentaje = nuevoIRPF;
 
-      // Guardar en localStorage
-      localStorage.setItem(irpfKey, nuevoIRPF.toString());
-      irpfPorcentaje = nuevoIRPF;
+        console.log(`💰 IRPF actualizado a ${nuevoIRPF}%`);
 
-      console.log(`💰 IRPF actualizado y guardado: ${nuevoIRPF}%`);
-      console.log(`💾 Guardado en localStorage con clave: ${irpfKey}`);
+        // Actualizar todos los valores neto sin recargar la página
+        // 1. Actualizar estadísticas globales
+        const totalGlobalBruto = jornalesConSalario.reduce((sum, j) => sum + j.total, 0);
+        const totalGlobalNeto = totalGlobalBruto * (1 - irpfPorcentaje / 100);
 
-      // Actualizar todos los valores neto sin recargar la página
-      // 1. Actualizar estadísticas globales
-      const totalGlobalBruto = jornalesConSalario.reduce((sum, j) => sum + j.total, 0);
-      const totalGlobalNeto = totalGlobalBruto * (1 - irpfPorcentaje / 100);
+        const statCards = stats.querySelectorAll('.stat-card .stat-value');
+        if (statCards.length >= 3) {
+          statCards[2].textContent = `${totalGlobalNeto.toFixed(2)}€`; // Total Neto
+          // Actualizar label con nuevo %
+          const netoLabel = stats.querySelectorAll('.stat-card .stat-label')[2];
+          if (netoLabel) netoLabel.textContent = `Total Neto (${irpfPorcentaje}% IRPF)`;
+        }
 
-      const statCards = stats.querySelectorAll('.stat-card .stat-value');
-      if (statCards.length >= 3) {
-        statCards[2].textContent = `${totalGlobalNeto.toFixed(2)}€`; // Total Neto
-        // Actualizar label con nuevo %
-        const netoLabel = stats.querySelectorAll('.stat-card .stat-label')[2];
-        if (netoLabel) netoLabel.textContent = `Total Neto (${irpfPorcentaje}% IRPF)`;
-      }
+        // 2. Actualizar todas las filas de jornales y totales de quincena
+        document.querySelectorAll('.quincena-card').forEach(card => {
+          // Actualizar todas las filas de la tabla
+          card.querySelectorAll('tbody tr').forEach(row => {
+            const brutoElement = row.querySelector('.bruto-value strong');
+            if (brutoElement) {
+              const bruto = parseFloat(brutoElement.textContent.replace('€', ''));
+              const neto = bruto * (1 - irpfPorcentaje / 100);
+              const netoElement = row.querySelector('.neto-value strong');
+              if (netoElement) {
+                netoElement.textContent = `${neto.toFixed(2)}€`;
+              }
+            }
+          });
 
-      // 2. Actualizar todas las filas de jornales y totales de quincena
-      document.querySelectorAll('.quincena-card').forEach(card => {
-        // Actualizar todas las filas de la tabla
-        card.querySelectorAll('tbody tr').forEach(row => {
-          const brutoElement = row.querySelector('.bruto-value strong');
-          if (brutoElement) {
-            const bruto = parseFloat(brutoElement.textContent.replace('€', ''));
-            const neto = bruto * (1 - irpfPorcentaje / 100);
-            const netoElement = row.querySelector('.neto-value strong');
-            if (netoElement) {
-              netoElement.textContent = `${neto.toFixed(2)}€`;
+          // Actualizar totales de la quincena en el header
+          const brutoValueElement = card.querySelector('.quincena-total .bruto-value');
+          if (brutoValueElement) {
+            const totalBruto = parseFloat(brutoValueElement.textContent.replace('€', ''));
+            const totalNeto = totalBruto * (1 - irpfPorcentaje / 100);
+            const netoValueElement = card.querySelector('.quincena-total .neto-value');
+            if (netoValueElement) {
+              netoValueElement.textContent = `${totalNeto.toFixed(2)}€`;
             }
           }
         });
-
-        // Actualizar totales de la quincena en el header
-        const brutoValueElement = card.querySelector('.quincena-total .bruto-value');
-        if (brutoValueElement) {
-          const totalBruto = parseFloat(brutoValueElement.textContent.replace('€', ''));
-          const totalNeto = totalBruto * (1 - irpfPorcentaje / 100);
-          const netoValueElement = card.querySelector('.quincena-total .neto-value');
-          if (netoValueElement) {
-            netoValueElement.textContent = `${totalNeto.toFixed(2)}€`;
-          }
-        }
       });
-    };
-
-    // Event listeners para cambios en IRPF
-    if (irpfInput) {
-      // Evento 'change' - cuando el usuario presiona Enter o cambia de campo
-      irpfInput.addEventListener('change', actualizarIRPF);
-
-      // Evento 'blur' - cuando el usuario sale del input (más robusto)
-      irpfInput.addEventListener('blur', actualizarIRPF);
     }
 
   } catch (error) {
@@ -2883,185 +2833,6 @@ async function loadSueldometro() {
     loading.classList.add('hidden');
   }
 }
-
-/**
- * Inicializar funcionalidad de añadir jornal manual
- */
-function initAddJornalManual() {
-  const addBtn = document.getElementById('add-jornal-btn');
-  const modal = document.getElementById('add-jornal-modal');
-  const closeBtn = document.getElementById('close-jornal-modal');
-  const cancelBtn = document.getElementById('cancel-jornal');
-  const saveBtn = document.getElementById('save-jornal');
-
-  const fechaInput = document.getElementById('jornal-fecha');
-  const jornadaSelect = document.getElementById('jornal-jornada');
-  const puestoSelect = document.getElementById('jornal-puesto');
-  const puestoOtroGroup = document.getElementById('jornal-puesto-otro-group');
-  const puestoOtroInput = document.getElementById('jornal-puesto-otro');
-  const empresaInput = document.getElementById('jornal-empresa');
-  const buqueInput = document.getElementById('jornal-buque');
-  const parteInput = document.getElementById('jornal-parte');
-
-  const errorMsg = document.getElementById('jornal-error');
-  const successMsg = document.getElementById('jornal-success');
-
-  if (!addBtn || !modal) return;
-
-  // Abrir modal
-  addBtn.addEventListener('click', () => {
-    modal.style.display = 'flex';
-    // Limpiar formulario
-    fechaInput.value = '';
-    jornadaSelect.value = '';
-    puestoSelect.value = '';
-    puestoOtroGroup.style.display = 'none';
-    puestoOtroInput.value = '';
-    empresaInput.value = '';
-    buqueInput.value = '';
-    parteInput.value = '';
-    errorMsg.textContent = '';
-    errorMsg.style.display = 'none';
-    successMsg.textContent = '';
-    successMsg.style.display = 'none';
-  });
-
-  // Cerrar modal
-  const cerrarModal = () => {
-    modal.style.display = 'none';
-  };
-
-  closeBtn.addEventListener('click', cerrarModal);
-  cancelBtn.addEventListener('click', cerrarModal);
-
-  // Cerrar al hacer clic fuera del modal
-  modal.addEventListener('click', (e) => {
-    if (e.target === modal) cerrarModal();
-  });
-
-  // Mostrar/ocultar campo "Otro puesto"
-  puestoSelect.addEventListener('change', () => {
-    if (puestoSelect.value === 'otro') {
-      puestoOtroGroup.style.display = 'block';
-    } else {
-      puestoOtroGroup.style.display = 'none';
-    }
-  });
-
- // Guardar jornal
-  saveBtn.addEventListener('click', async () => {
-    errorMsg.style.display = 'none';
-    successMsg.style.display = 'none';
-    saveBtn.disabled = true; // Deshabilitar botón
-    saveBtn.textContent = 'Guardando...';
-
-    // Validar campos obligatorios
-    if (!fechaInput.value || !jornadaSelect.value || !puestoSelect.value || !empresaInput.value) {
-      errorMsg.textContent = 'Por favor, completa todos los campos obligatorios (*)';
-      errorMsg.style.display = 'block';
-      saveBtn.disabled = false; // Rehabilitar botón
-      saveBtn.textContent = 'Guardar Jornal';
-      return;
-    }
-
-    // Obtener puesto final
-    let puestoFinal = puestoSelect.value;
-    if (puestoFinal === 'otro') {
-      if (!puestoOtroInput.value.trim()) {
-        errorMsg.textContent = 'Por favor, especifica el puesto';
-        errorMsg.style.display = 'block';
-        saveBtn.disabled = false;
-        saveBtn.textContent = 'Guardar Jornal';
-        return;
-      }
-      puestoFinal = puestoOtroInput.value.trim();
-    }
-
-    // Formatear fecha a DD/MM/YYYY
-    const fechaParts = fechaInput.value.split('-'); // YYYY-MM-DD
-    const fechaFormateada = `${fechaParts[2]}/${fechaParts[1]}/${fechaParts[0]}`;
-
-    // Crear objeto jornal (CON LA CHAPA)
-    const nuevoJornal = {
-      chapa: AppState.currentUser, // <-- ¡ARREGLO IMPORTANTE!
-      fecha: fechaFormateada,
-      jornada: jornadaSelect.value,
-      puesto: puestoFinal,
-      empresa: empresaInput.value.trim(),
-      buque: buqueInput.value.trim() || '--',
-      parte: parteInput.value || '1',
-      manual: true // Marcar como añadido manualmente
-    };
-
-    console.log('💾 Guardando jornal manual:', nuevoJornal);
-
-    try {
-      // 1. Guardar en localStorage (como antes)
-      let historico = JSON.parse(localStorage.getItem('jornales_historico') || '[]');
-
-      const existe = historico.some(j =>
-        j.fecha === nuevoJornal.fecha &&
-        j.jornada === nuevoJornal.jornada &&
-        j.puesto === nuevoJornal.puesto &&
-        j.chapa === nuevoJornal.chapa // Asegurarse de chequear la chapa
-      );
-
-      if (existe) {
-        throw new Error('Ya existe un jornal con estos datos');
-      }
-
-      historico.push(nuevoJornal);
-      historico.sort((a, b) => {
-        const [dA, mA, yA] = a.fecha.split('/');
-        const [dB, mB, yB] = b.fecha.split('/');
-        const dateA = new Date(yA, mA - 1, dA);
-        const dateB = new Date(yB, mB - 1, dB);
-        return dateB - dateA;
-      });
-      localStorage.setItem('jornales_historico', JSON.stringify(historico));
-      console.log('✅ Jornal guardado en localStorage');
-
-      // 2. ENVIAR A GOOGLE SHEETS [NUEVO]
-      // Usamos la función existente, pero solo con el nuevo jornal
-      /*
-      console.log('📤 Enviando jornal a Google Sheets...');
-      // La función sincronizarJornalesBackup ya existe en sheets.js
-      await SheetsAPI.sincronizarJornalesBackup(AppState.currentUser, [nuevoJornal]);
-      console.log('✅ Jornal guardado en Google Sheets');
-      */
-      // Mostrar mensaje de éxito
-      successMsg.textContent = '✅ Jornal añadido (guardado en la nube)';
-      successMsg.style.display = 'block';
-
-      // Recargar automáticamente las vistas [MEJORADO]
-      setTimeout(async () => {
-        // Recargar Mis Jornales si estamos en esa página
-        if (document.getElementById('page-jornales').classList.contains('active')) {
-          await loadJornales();
-        }
-        // Recargar Sueldómetro también
-        if (document.getElementById('page-sueldometro').classList.contains('active')) {
-          await loadSueldometro();
-        }
-        cerrarModal();
-      }, 1500);
-
-    } catch (error) {
-      console.error('❌ Error guardando jornal:', error);
-      errorMsg.textContent = error.message || 'Error al guardar el jornal. Inténtalo de nuevo.';
-      errorMsg.style.display = 'block';
-    } finally {
-      saveBtn.disabled = false; // Rehabilitar botón en cualquier caso
-      saveBtn.textContent = 'Guardar Jornal';
-    }
-  });
-}
-
-// Inicializar al cargar el DOM
-document.addEventListener('DOMContentLoaded', () => {
-  initAddJornalManual();
-});
-
 
 
 
