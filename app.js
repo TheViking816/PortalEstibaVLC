@@ -3023,11 +3023,12 @@ function initAddJornalManual() {
 
       // 2. ENVIAR A GOOGLE SHEETS [NUEVO]
       // Usamos la función existente, pero solo con el nuevo jornal
+      /*
       console.log('📤 Enviando jornal a Google Sheets...');
       // La función sincronizarJornalesBackup ya existe en sheets.js
       await SheetsAPI.sincronizarJornalesBackup(AppState.currentUser, [nuevoJornal]);
       console.log('✅ Jornal guardado en Google Sheets');
-
+      */
       // Mostrar mensaje de éxito
       successMsg.textContent = '✅ Jornal añadido (guardado en la nube)';
       successMsg.style.display = 'block';
@@ -3060,6 +3061,7 @@ function initAddJornalManual() {
 document.addEventListener('DOMContentLoaded', () => {
   initAddJornalManual();
 });
+
 
 
 
