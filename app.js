@@ -1177,17 +1177,22 @@ async function loadJornales() {
   try {
     let data = [];
 
-    // 1. INTENTAR CARGAR DESDE JORNALES_HISTORICO_ACUMULADO (se actualiza automáticamente cada hora)
-    console.log('📥 Cargando jornales desde Jornales_Historico_Acumulado...');
+    // 1. CARGAR DESDE JORNALES_HISTORICO_ACUMULADO
+    // (incluye automáticos + manuales, identificados por columna Origen='MANUAL')
+    console.log('📥 Cargando jornales desde Jornales_Historico_Acumulado (incluye manuales)...');
     try {
       const jornalesAcumulados = await SheetsAPI.getJornalesHistoricoAcumulado(AppState.currentUser);
 
       if (jornalesAcumulados && jornalesAcumulados.length > 0) {
-        console.log(`✅ Cargados ${jornalesAcumulados.length} jornales desde histórico acumulado`);
+        const manuales = jornalesAcumulados.filter(j => j.manual).length;
+        const automaticos = jornalesAcumulados.length - manuales;
+        console.log(`✅ ${jornalesAcumulados.length} jornales: ${automaticos} automáticos + ${manuales} manuales`);
+
         data = jornalesAcumulados;
 
-        // Guardar en localStorage como caché por si falla la conexión en el futuro
+        // Guardar en localStorage como caché
         const historico = JSON.parse(localStorage.getItem('jornales_historico') || '[]');
+
         jornalesAcumulados.forEach(jornal => {
           const existe = historico.some(h =>
             h.fecha === jornal.fecha &&
@@ -1199,6 +1204,7 @@ async function loadJornales() {
             historico.push(jornal);
           }
         });
+
         localStorage.setItem('jornales_historico', JSON.stringify(historico));
       } else {
         throw new Error('No hay jornales en histórico acumulado, usando localStorage');
@@ -1269,9 +1275,9 @@ async function loadJornales() {
       <svg xmlns="http://www.w3.org/2000/svg" style="width: 20px; height: 20px; margin-right: 8px;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
       </svg>
-      Exportar a CSV
+      Exportar a PDF
     `;
-    exportBtn.addEventListener('click', () => exportJornalesToCSV(data));
+    exportBtn.addEventListener('click', () => exportJornalesToPDF(data));
     container.appendChild(exportBtn);
 
     // Renderizar stats totales
@@ -1523,43 +1529,123 @@ function cleanupOldJornales(historico) {
 }
 
 /**
- * Exporta jornales a CSV
+ * Exporta jornales a PDF organizados por quincena
  */
-function exportJornalesToCSV(data) {
-  // Ordenar por fecha
-  const sorted = data.sort((a, b) => {
-    const dateA = new Date(a.fecha.split('/').reverse().join('-'));
-    const dateB = new Date(b.fecha.split('/').reverse().join('-'));
-    return dateA - dateB;
+function exportJornalesToPDF(data) {
+  // Acceder a jsPDF desde el objeto global window
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+
+  // Agrupar jornales por quincena
+  const quincenasMap = groupByQuincena(data);
+
+  // Ordenar quincenas (más recientes primero)
+  const quincenasOrdenadas = Array.from(quincenasMap.entries()).sort((a, b) => {
+    const [yearA, monthA, quincenaA] = a[0].split('-').map(Number);
+    const [yearB, monthB, quincenaB] = b[0].split('-').map(Number);
+    if (yearB !== yearA) return yearB - yearA;
+    if (monthB !== monthA) return monthB - monthA;
+    return quincenaB - quincenaA;
   });
 
-  // Crear CSV
-  const headers = ['Fecha', 'Chapa', 'Puesto', 'Jornada', 'Empresa', 'Buque', 'Parte'];
-  const rows = sorted.map(row => [
-    row.fecha,
-    row.chapa,
-    row.puesto,
-    row.jornada,
-    row.empresa,
-    row.buque,
-    row.parte
-  ]);
+  const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
-  const csvContent = [
-    headers.join(','),
-    ...rows.map(row => row.map(field => `"${field}"`).join(','))
-  ].join('\n');
+  let isFirstPage = true;
 
-  // Descargar
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('a');
-  const url = URL.createObjectURL(blob);
-  link.setAttribute('href', url);
-  link.setAttribute('download', `jornales_chapa_${AppState.currentUser}_${new Date().toISOString().split('T')[0]}.csv`);
-  link.style.visibility = 'hidden';
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  // Generar una sección por cada quincena
+  quincenasOrdenadas.forEach(([key, jornales]) => {
+    const [year, month, quincena] = key.split('-').map(Number);
+    const monthName = monthNames[month - 1];
+    const rangoInicio = quincena === 1 ? 1 : 16;
+    const rangoFin = quincena === 1 ? 15 : new Date(year, month, 0).getDate();
+
+    // Agregar nueva página si no es la primera
+    if (!isFirstPage) {
+      doc.addPage();
+    }
+    isFirstPage = false;
+
+    // Título de la quincena
+    doc.setFontSize(16);
+    doc.setTextColor(10, 46, 92); // Color azul del puerto
+    doc.text(`${monthName} ${year} - Quincena ${quincena}`, 14, 15);
+
+    doc.setFontSize(10);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Días ${rangoInicio} al ${rangoFin}`, 14, 22);
+
+    // Estadísticas de la quincena
+    doc.setFontSize(10);
+    doc.setTextColor(0, 0, 0);
+    doc.text(`Total de jornales: ${jornales.length}`, 14, 28);
+
+    // Ordenar jornales por fecha
+    const jornalesOrdenados = jornales.sort((a, b) => {
+      const dateA = new Date(a.fecha.split('/').reverse().join('-'));
+      const dateB = new Date(b.fecha.split('/').reverse().join('-'));
+      return dateA - dateB;
+    });
+
+    // Preparar datos para la tabla
+    const tableData = jornalesOrdenados.map(j => [
+      j.fecha,
+      j.puesto,
+      j.jornada,
+      j.empresa,
+      j.buque || '-',
+      j.parte || '-'
+    ]);
+
+    // Crear tabla con autoTable
+    doc.autoTable({
+      startY: 32,
+      head: [['Fecha', 'Puesto', 'Jornada', 'Empresa', 'Buque', 'Parte']],
+      body: tableData,
+      theme: 'striped',
+      headStyles: {
+        fillColor: [10, 46, 92], // Color azul del puerto
+        textColor: [255, 255, 255],
+        fontSize: 10,
+        fontStyle: 'bold'
+      },
+      bodyStyles: {
+        fontSize: 9,
+        textColor: [50, 50, 50]
+      },
+      alternateRowStyles: {
+        fillColor: [245, 247, 250]
+      },
+      margin: { top: 32, left: 14, right: 14 },
+      styles: {
+        cellPadding: 3,
+        lineColor: [200, 200, 200],
+        lineWidth: 0.1
+      }
+    });
+  });
+
+  // Agregar información del trabajador en el pie de página de cada página
+  const pageCount = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setTextColor(150, 150, 150);
+    doc.text(
+      `Chapa ${AppState.currentUser} - Página ${i} de ${pageCount}`,
+      14,
+      doc.internal.pageSize.height - 10
+    );
+    doc.text(
+      `Generado el ${new Date().toLocaleDateString('es-ES')}`,
+      doc.internal.pageSize.width - 14,
+      doc.internal.pageSize.height - 10,
+      { align: 'right' }
+    );
+  }
+
+  // Descargar PDF
+  doc.save(`jornales_chapa_${AppState.currentUser}_${new Date().toISOString().split('T')[0]}.pdf`);
 }
 
 /**
@@ -2405,12 +2491,15 @@ async function loadSueldometro() {
     console.log('📊 Cargando datos del Sueldómetro...');
 
     const [jornales, mapeoPuestos, tablaSalarial] = await Promise.all([
-      SheetsAPI.getJornalesHistoricoAcumulado(AppState.currentUser),
+      SheetsAPI.getJornalesHistoricoAcumulado(AppState.currentUser), // Ya incluye manuales
       SheetsAPI.getMapeoPuestos(),
       SheetsAPI.getTablaSalarial()
     ]);
 
-    console.log(`✅ Datos cargados: ${jornales.length} jornales, ${mapeoPuestos.length} puestos, ${tablaSalarial.length} salarios`);
+    const manuales = jornales.filter(j => j.manual).length;
+    const automaticos = jornales.length - manuales;
+    console.log(`✅ ${jornales.length} jornales: ${automaticos} automáticos + ${manuales} manuales`);
+    console.log(`   ${mapeoPuestos.length} puestos, ${tablaSalarial.length} salarios`);
 
     if (jornales.length === 0) {
       content.innerHTML = `
@@ -2418,9 +2507,20 @@ async function loadSueldometro() {
           <div class="empty-icon">📊</div>
           <h3>No hay jornales registrados</h3>
           <p>Cuando trabajes tus primeros jornales aparecerán aquí con su estimación salarial</p>
+          <p style="margin-top: 1rem;">
+            <button id="add-jornal-btn-empty" class="btn-primary">➕ Añadir Jornal Manual</button>
+          </p>
         </div>
       `;
       loading.classList.add('hidden');
+
+      // Vincular botón de añadir jornal
+      const addBtnEmpty = document.getElementById('add-jornal-btn-empty');
+      if (addBtnEmpty) {
+        addBtnEmpty.addEventListener('click', () => {
+          document.getElementById('add-jornal-modal').style.display = 'flex';
+        });
+      }
       return;
     }
 
@@ -2705,16 +2805,49 @@ async function loadSueldometro() {
       return tarifasRemate[jornada]?.[tipoDia] || null;
     };
 
-    // Cargar valores bloqueados de localStorage
+    // Cargar valores bloqueados desde Sheets primero, luego localStorage como fallback
     const lockedValuesKey = `locked_values_${AppState.currentUser}`;
     let lockedValues = {};
+
+    // 1. Intentar cargar desde Sheets
     try {
-      const stored = localStorage.getItem(lockedValuesKey);
-      if (stored) {
-        lockedValues = JSON.parse(stored);
+      console.log('📥 Cargando primas personalizadas desde Sheets...');
+      const primasSheets = await SheetsAPI.getPrimasPersonalizadas(AppState.currentUser);
+
+      if (primasSheets && primasSheets.length > 0) {
+        // Poblar lockedValues con datos de Sheets
+        primasSheets.forEach(p => {
+          const key = `${p.fecha}_${p.jornada.replace(/\s+a\s+/g, '-').replace(/\s+/g, '')}`;
+          lockedValues[key] = {
+            prima: p.prima || 0,
+            movimientos: p.movimientos || 0,
+            horasRelevo: p.relevo || 0,
+            horasRemate: p.remate || 0,
+            primaLocked: true,
+            movimientosLocked: true
+          };
+        });
+
+        console.log(`✅ ${primasSheets.length} primas personalizadas cargadas desde Sheets`);
+
+        // Guardar en localStorage como caché
+        localStorage.setItem(lockedValuesKey, JSON.stringify(lockedValues));
       }
-    } catch (e) {
-      console.warn('Error cargando valores bloqueados:', e);
+    } catch (error) {
+      console.warn('⚠️ Error cargando primas desde Sheets, usando localStorage:', error);
+    }
+
+    // 2. Si no hay datos de Sheets, cargar desde localStorage
+    if (Object.keys(lockedValues).length === 0) {
+      try {
+        const stored = localStorage.getItem(lockedValuesKey);
+        if (stored) {
+          lockedValues = JSON.parse(stored);
+          console.log(`📂 Valores bloqueados cargados desde localStorage`);
+        }
+      } catch (e) {
+        console.warn('Error cargando valores bloqueados de localStorage:', e);
+      }
     }
 
     // Función para guardar valores bloqueados
@@ -3466,6 +3599,7 @@ function initAddJornalManual() {
 
   const fechaInput = document.getElementById('jornal-fecha');
   const jornadaSelect = document.getElementById('jornal-jornada');
+  const tipoDiaSelect = document.getElementById('jornal-tipo-dia');
   const puestoSelect = document.getElementById('jornal-puesto');
   const puestoOtroGroup = document.getElementById('jornal-puesto-otro-group');
   const puestoOtroInput = document.getElementById('jornal-puesto-otro');
@@ -3484,6 +3618,7 @@ function initAddJornalManual() {
     // Limpiar formulario
     fechaInput.value = '';
     jornadaSelect.value = '';
+    tipoDiaSelect.value = '';
     puestoSelect.value = '';
     puestoOtroGroup.style.display = 'none';
     puestoOtroInput.value = '';
@@ -3524,7 +3659,7 @@ function initAddJornalManual() {
     successMsg.style.display = 'none';
 
     // Validar campos obligatorios
-    if (!fechaInput.value || !jornadaSelect.value || !puestoSelect.value || !empresaInput.value) {
+    if (!fechaInput.value || !jornadaSelect.value || !tipoDiaSelect.value || !puestoSelect.value || !empresaInput.value) {
       errorMsg.textContent = 'Por favor, completa todos los campos obligatorios (*)';
       errorMsg.style.display = 'block';
       return;
@@ -3547,10 +3682,12 @@ function initAddJornalManual() {
 
     // Crear objeto jornal
     const nuevoJornal = {
+      chapa: AppState.currentUser,
       fecha: fechaFormateada,
       jornada: jornadaSelect.value,
+      tipo_dia: tipoDiaSelect.value, // Necesario para cálculo de salario
       puesto: puestoFinal,
-      empresa: empresaInput.value.trim(),
+      empresa: empresaInput.value, // Select, no necesita trim
       buque: buqueInput.value.trim() || '--',
       parte: parteInput.value || '1',
       manual: true // Marcar como añadido manualmente
@@ -3590,10 +3727,28 @@ function initAddJornalManual() {
       // Guardar en localStorage
       localStorage.setItem('jornales_historico', JSON.stringify(historico));
 
-      console.log('✅ Jornal guardado correctamente');
+      // Guardar también en Google Sheets para persistencia permanente
+      SheetsAPI.saveJornalManual(
+        AppState.currentUser,
+        nuevoJornal.fecha,
+        nuevoJornal.jornada,
+        nuevoJornal.tipo_dia,
+        nuevoJornal.puesto,
+        nuevoJornal.empresa,
+        nuevoJornal.buque,
+        nuevoJornal.parte
+      ).then(success => {
+        if (success) {
+          console.log('✅ Jornal también guardado en Google Sheets');
+        }
+      }).catch(err => {
+        console.error('❌ Error guardando en Sheets (continuando):', err);
+      });
+
+      console.log('✅ Jornal guardado correctamente en localStorage');
 
       // Mostrar mensaje de éxito
-      successMsg.textContent = '✅ Jornal añadido correctamente';
+      successMsg.textContent = '✅ Jornal añadido correctamente y guardado permanentemente';
       successMsg.style.display = 'block';
 
       // Recargar automáticamente las vistas
@@ -3601,6 +3756,11 @@ function initAddJornalManual() {
         // Recargar Mis Jornales si estamos en esa página
         if (document.getElementById('page-jornales').classList.contains('active')) {
           await loadJornales();
+        }
+
+        // Recargar Sueldómetro si estamos en esa página
+        if (document.getElementById('page-sueldometro').classList.contains('active')) {
+          await loadSueldometro();
         }
 
         cerrarModal();

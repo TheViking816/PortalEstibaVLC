@@ -24,6 +24,8 @@ const SHEETS_CONFIG = {
   GID_PUERTAS: '1650839211',       // Pestaña: Puertas (No se usa, getPuertas usa URL hardcodeada)
   GID_MAPEO_PUESTOS: '418043978',  // Pestaña: MAPEO_PUESTOS (Para Sueldómetro)
   GID_TABLA_SALARIOS: '1710373929', // Pestaña: TABLA_SALARIOS (Para Sueldómetro)
+  GID_CONFIGURACION_USUARIO: '988244680', // Pestaña: Configuracion_Usuario (IRPF)
+  GID_PRIMAS_PERSONALIZADAS: '1977235036', // Pestaña: Primas_Personalizadas
 
   // URL de la hoja "censo_limpio"
   URL_CENSO_LIMPIO: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTcJ5Irxl93zwDqehuLW7-MsuVtphRDtmF8Rwp-yueqcAYRfgrTtEdKDwX8WKkJj1m0rVJc8AncGN_A/pub?gid=1216182924&single=true&output=csv',
@@ -33,7 +35,7 @@ const SHEETS_CONFIG = {
   URL_TABLA_SALARIOS: 'https://docs.google.com/spreadsheets/d/1j-IaOHXoLEP4bK2hjdn2uAYy8a2chqiQSOw4Nfxoyxc/export?format=csv&gid=1710373929',
 
   // URL del Apps Script (Web App deployada) - ACTUALIZADA
-  APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbz39y4tlgA1zSW0JXsPAeX5Lac9k5fZOuTatb0kMbY_7951nTqMFN0wPvqWbOP5x2NWdA/exec'
+  APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbxgwhFR-rb-Lqs9YMPnGEbaLVzVepnGJg3EkkVSNDVCSMaB3p2S2AqNcxHruIzsaHxaNA/exec'
 };
 
 /**
@@ -762,7 +764,7 @@ const SheetsAPI = {
 
       // Si no está configurada en localStorage, usar la URL por defecto
       if (!appsScriptURL || appsScriptURL === '' || appsScriptURL === 'null') {
-        appsScriptURL = 'https://script.google.com/macros/s/AKfycby7Cj08EDdVHXlzb1BKUXg0G5Zc_FuOMTp672U9_2K9tzgVy5p6q_sj4G8ctvHjR58hxg/exec';
+        appsScriptURL = SHEETS_CONFIG.APPS_SCRIPT_URL;
         // Guardar en localStorage para futuros usos
         localStorage.setItem('foro_apps_script_url', appsScriptURL);
         console.log('✅ URL del Apps Script configurada automáticamente');
@@ -801,7 +803,7 @@ const SheetsAPI = {
       let appsScriptURL = localStorage.getItem('foro_apps_script_url');
 
       if (!appsScriptURL || appsScriptURL === '' || appsScriptURL === 'null') {
-        appsScriptURL = 'https://script.google.com/macros/s/AKfycby7Cj08EDdVHXlzb1BKUXg0G5Zc_FuOMTp672U9_2K9tzgVy5p6q_sj4G8ctvHjR58hxg/exec';
+        appsScriptURL = SHEETS_CONFIG.APPS_SCRIPT_URL;
       }
 
       console.log('🔐 Enviando cambio de contraseña a Apps Script...');
@@ -837,7 +839,7 @@ const SheetsAPI = {
       let appsScriptURL = localStorage.getItem('foro_apps_script_url');
 
       if (!appsScriptURL || appsScriptURL === '' || appsScriptURL === 'null') {
-        appsScriptURL = 'https://script.google.com/macros/s/AKfycby7Cj08EDdVHXlzb1BKUXg0G5Zc_FuOMTp672U9_2K9tzgVy5p6q_sj4G8ctvHjR58hxg/exec';
+        appsScriptURL = SHEETS_CONFIG.APPS_SCRIPT_URL;
       }
 
       console.log(`📤 Sincronizando ${jornales.length} jornales al backup...`);
@@ -1090,7 +1092,8 @@ const SheetsAPI = {
   /**
    * [ROBUSTO] Obtiene jornales desde el histórico acumulado (Jornales_Historico_Acumulado)
    * Esta pestaña se alimenta automáticamente cada hora desde contrata_glide vía Apps Script
-   * Columnas: Fecha, Chapa, Puesto_Contratacion, Jornada, Empresa, Buque, Parte, Logo_Empresa_URL, Timestamp_Guardado
+   * AHORA TAMBIÉN INCLUYE JORNALES MANUALES (con columna Origen = "MANUAL")
+   * Columnas: Fecha, Chapa, Puesto_Contratacion, Jornada, Empresa, Buque, Parte, Origen
    */
   async getJornalesHistoricoAcumulado(chapa) {
     try {
@@ -1101,19 +1104,25 @@ const SheetsAPI = {
       const jornalesChapa = data.filter(row => {
         const rowChapa = (row.Chapa || row.chapa || '').toString().trim();
         return rowChapa === chapa.toString().trim();
-      }).map(row => ({
-        chapa: row.Chapa || row.chapa || '',
-        fecha: row.Fecha || row.fecha || '',
-        puesto: row.Puesto_Contratacion || row.puesto_contratacion || row.Puesto || row.puesto || '',
-        jornada: row.Jornada || row.jornada || '',
-        empresa: row.Empresa || row.empresa || '',
-        buque: row.Buque || row.buque || '',
-        parte: row.Parte || row.parte || '',
-        logo_empresa_url: row.Logo_Empresa_URL || row.logo_empresa_url || '',
-        timestamp_guardado: row.Timestamp_Guardado || row.timestamp_guardado || ''
-      })).filter(item => item.fecha && item.jornada); // Filtrar filas sin fecha o jornada
+      }).map(row => {
+        const origen = (row.Origen || row.origen || '').toString().trim();
+        const esManual = origen === 'MANUAL';
 
-      console.log(`✅ Jornales históricos acumulados para chapa ${chapa}:`, jornalesChapa.length);
+        return {
+          chapa: row.Chapa || row.chapa || '',
+          fecha: row.Fecha || row.fecha || '',
+          puesto: row.Puesto_Contratacion || row.puesto_contratacion || row.Puesto || row.puesto || '',
+          jornada: row.Jornada || row.jornada || '',
+          empresa: row.Empresa || row.empresa || '',
+          buque: row.Buque || row.buque || '',
+          parte: row.Parte || row.parte || '',
+          manual: esManual, // Marcar si es manual
+          origen: origen
+        };
+      }).filter(item => item.fecha && item.jornada); // Filtrar filas sin fecha o jornada
+
+      const manuales = jornalesChapa.filter(j => j.manual).length;
+      console.log(`✅ Jornales históricos acumulados para chapa ${chapa}: ${jornalesChapa.length} (${manuales} manuales)`);
       return jornalesChapa;
 
     } catch (error) {
@@ -1282,29 +1291,42 @@ const SheetsAPI = {
   },
 
   /**
-   * Recupera la configuración del usuario (IRPF) desde Google Sheets
+   * Recupera la configuración del usuario (IRPF) desde CSV público
+   * Lee directamente desde Configuracion_Usuario via CSV (sin CORS)
    */
   async getUserConfig(chapa) {
     try {
-      const response = await fetch(SHEETS_CONFIG.APPS_SCRIPT_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'getUserConfig',
-          chapa: chapa
-        })
+      // Leer desde CSV público
+      const data = await fetchSheetData(SHEETS_CONFIG.SHEET_ID, SHEETS_CONFIG.GID_CONFIGURACION_USUARIO, false);
+
+      // Buscar configuración del usuario
+      const config = data.find(row => {
+        const rowChapa = (row.Chapa || row.chapa || '').toString().trim();
+        return rowChapa === chapa.toString().trim();
       });
 
-      const result = await response.json();
-      if (result.success) {
-        console.log('✅ IRPF recuperado de Sheets:', result.data);
-        return result.data.irpf;
+      if (config) {
+        const irpf = parseFloat(config.IRPF_Porcentaje || config.irpf_porcentaje || 15);
+        console.log(`✅ IRPF recuperado de Sheets para chapa ${chapa}: ${irpf}%`);
+
+        // Guardar en localStorage como caché
+        localStorage.setItem(`irpf_${chapa}`, irpf.toString());
+
+        return irpf;
       } else {
-        console.log('ℹ️ IRPF no encontrado, usando defecto');
+        console.log(`ℹ️ IRPF no encontrado en Sheets para chapa ${chapa}, usando defecto`);
         return 15; // Defecto
       }
     } catch (error) {
       console.error('❌ Error en getUserConfig:', error);
+
+      // Fallback a localStorage
+      const irpf = localStorage.getItem(`irpf_${chapa}`);
+      if (irpf !== null && irpf !== 'null') {
+        console.log('📂 IRPF recuperado de localStorage (fallback):', irpf);
+        return parseFloat(irpf);
+      }
+
       return 15; // Defecto
     }
   },
@@ -1341,29 +1363,95 @@ const SheetsAPI = {
   },
 
   /**
-   * Recupera todas las primas personalizadas del usuario desde Google Sheets
+   * Recupera todas las primas personalizadas del usuario desde CSV público
+   * Lee directamente desde Primas_Personalizadas via CSV (sin CORS)
    */
   async getPrimasPersonalizadas(chapa) {
     try {
-      const response = await fetch(SHEETS_CONFIG.APPS_SCRIPT_URL, {
+      // Leer desde CSV público
+      const data = await fetchSheetData(SHEETS_CONFIG.SHEET_ID, SHEETS_CONFIG.GID_PRIMAS_PERSONALIZADAS, false);
+
+      // Filtrar por chapa y mapear
+      const primas = data.filter(row => {
+        const rowChapa = (row.Chapa || row.chapa || '').toString().trim();
+        return rowChapa === chapa.toString().trim();
+      }).map(row => ({
+        fecha: row.Fecha || row.fecha || '',
+        jornada: row.Jornada || row.jornada || '',
+        prima: parseFloat(row.Prima_Personalizada || row.prima_personalizada || 0),
+        movimientos: parseFloat(row.Movimientos_Personalizados || row.movimientos_personalizados || 0),
+        relevo: parseFloat(row.Relevo || row.relevo || 0),
+        remate: parseFloat(row.Remate || row.remate || 0)
+      }));
+
+      console.log(`✅ ${primas.length} primas recuperadas de Sheets para chapa ${chapa}`);
+
+      // Guardar en localStorage como caché
+      const primasObj = {};
+      primas.forEach(p => {
+        const key = `${p.fecha}_${p.jornada}`;
+        primasObj[key] = p;
+      });
+      localStorage.setItem('primas_personalizadas', JSON.stringify(primasObj));
+
+      return primas;
+    } catch (error) {
+      console.error('❌ Error en getPrimasPersonalizadas:', error);
+
+      // Fallback a localStorage
+      const primas = localStorage.getItem('primas_personalizadas') || '{}';
+      const primasObj = JSON.parse(primas);
+      const primasArray = Object.values(primasObj);
+
+      console.log(`📂 ${primasArray.length} primas recuperadas de localStorage (fallback)`);
+      return primasArray;
+    }
+  },
+
+  /**
+   * Guarda un jornal manual en Google Sheets
+   */
+  async saveJornalManual(chapa, fecha, jornada, tipo_dia, puesto, empresa, buque = '--', parte = '1') {
+    try {
+      await fetch(SHEETS_CONFIG.APPS_SCRIPT_URL, {
         method: 'POST',
+        mode: 'no-cors',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'getPrimasPersonalizadas',
-          chapa: chapa
+          action: 'saveJornalManual',
+          chapa: chapa,
+          fecha: fecha,
+          jornada: jornada,
+          tipo_dia: tipo_dia,
+          puesto: puesto,
+          empresa: empresa,
+          buque: buque,
+          parte: parte
         })
       });
 
-      const result = await response.json();
-      if (result.success) {
-        console.log(`✅ ${result.data.length} primas recuperadas de Sheets`);
-        return result.data;
-      } else {
-        console.log('ℹ️ No hay primas personalizadas');
-        return [];
-      }
+      console.log(`✅ Jornal manual enviado a Sheets: ${fecha} ${jornada} (no-cors mode)`);
+      return true;
     } catch (error) {
-      console.error('❌ Error en getPrimasPersonalizadas:', error);
+      console.error('❌ Error en saveJornalManual:', error);
+      return false;
+    }
+  },
+
+  /**
+   * Recupera todos los jornales manuales del usuario desde localStorage
+   * NOTA: Se guarda en Sheets como backup pero se lee desde localStorage por CORS
+   */
+  async getJornalesManuales(chapa) {
+    try {
+      // Leer desde localStorage (fuente principal)
+      const historico = JSON.parse(localStorage.getItem('jornales_historico') || '[]');
+      const jornalesManuales = historico.filter(j => j.manual === true && j.chapa === chapa);
+
+      console.log(`✅ ${jornalesManuales.length} jornales manuales recuperados de localStorage`);
+      return jornalesManuales;
+    } catch (error) {
+      console.error('❌ Error en getJornalesManuales:', error);
       return [];
     }
   }
@@ -1385,6 +1473,10 @@ function clearSheetsCache() {
 // Exponer API globalmente
 window.SheetsAPI = SheetsAPI;
 window.clearSheetsCache = clearSheetsCache;
+
+
+
+
 
 
 

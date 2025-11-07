@@ -281,6 +281,13 @@
         </div>
         <div id="jornales-content"></div>
       </div>
+
+      <!-- Botón flotante para añadir jornal -->
+      <button id="add-jornal-btn" class="fab-add-jornal" title="Añadir jornal manualmente">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
+        </svg>
+      </button>
     </section>
 
     <!-- PÁGINA SUELDÓMETRO -->
@@ -470,9 +477,6 @@
         <button id="close-jornal-modal" class="modal-close">&times;</button>
       </div>
       <div class="modal-body">
-        <p style="margin-bottom: 1rem; color: var(--puerto-dark-blue); font-size: 0.875rem;">
-          Introduce los datos de tu jornal. Este jornal se guardará localmente y se sincronizará con el Sueldómetro.
-        </p>
         <div class="form-group">
           <label for="jornal-fecha">Fecha *</label>
           <input type="date" id="jornal-fecha" required>
@@ -485,6 +489,18 @@
             <option value="08 a 14">08 a 14</option>
             <option value="14 a 20">14 a 20</option>
             <option value="20 a 02">20 a 02</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="jornal-tipo-dia">Tipo de Día *</label>
+          <select id="jornal-tipo-dia" required>
+            <option value="">Selecciona tipo de día</option>
+            <option value="LABORABLE">Laborable</option>
+            <option value="SABADO">Sábado</option>
+            <option value="FESTIVO">Festivo</option>
+            <option value="FEST. A LAB.">Festivo a Laborable (20-02)</option>
+            <option value="LAB A FEST">Laborable a Festivo (20-02)</option>
+            <option value="FEST. A FEST.">Festivo a Festivo (20-02)</option>
           </select>
         </div>
         <div class="form-group">
@@ -506,7 +522,15 @@
         </div>
         <div class="form-group">
           <label for="jornal-empresa">Empresa *</label>
-          <input type="text" id="jornal-empresa" placeholder="Ej: MSC, APM, CSP..." required>
+          <select id="jornal-empresa" required>
+            <option value="">Selecciona una empresa</option>
+            <option value="MSC">MSC</option>
+            <option value="CSP">CSP</option>
+            <option value="APM">APM</option>
+            <option value="ERH">ERH</option>
+            <option value="TRASMED">TRASMED</option>
+            <option value="VTEU">VTEU</option>
+          </select>
         </div>
         <div class="form-group">
           <label for="jornal-buque">Buque</label>
@@ -612,6 +636,9 @@
   </button>
 
   <!-- Scripts -->
+  <!-- jsPDF para exportar a PDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
   <script src="sheets.js?v=8"></script>
   <script src="app.js?v=8"></script>
 
