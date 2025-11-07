@@ -2302,13 +2302,14 @@ function determinarTipoDia(fecha, jornada) {
     const esFestivoManana = esFestivoFecha(diaSiguiente);
 
     if (jornada === '02-08') {
-      // Jornada 02-08: empieza de noche y termina por la mañana
-      if (esFestivoHoy && !esFestivoManana) {
-        return 'FEST-LAB';
-      } else if (esFestivoManana) {
-        return 'FESTIVO';
-      } else {
-        return 'LABORABLE';
+        // Jornada 02-08: empieza de noche y termina por la mañana
+        if (esFestivoHoy && !esFestivoManana) {
+          return 'FEST-LAB';
+        } else if (esFestivoManana) {
+          return 'FESTIVO';
+        } else {
+          return 'LABORABLE';
+        }
       }
     } else if (jornada === '20-02') {
       // Jornada 20-02: empieza de tarde y termina de madrugada
@@ -3761,6 +3762,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initReportJornal();
   initForoEnhanced();
 });
+
 
 
 
