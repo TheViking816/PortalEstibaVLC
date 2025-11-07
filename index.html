@@ -281,13 +281,6 @@
         </div>
         <div id="jornales-content"></div>
       </div>
-
-      <!-- Botón flotante para añadir jornal manual -->
-      <button id="add-jornal-btn" class="fab-btn" aria-label="Añadir jornal manual" title="Añadir jornal manualmente">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-        </svg>
-      </button>
     </section>
 
     <!-- PÁGINA SUELDÓMETRO -->
@@ -309,7 +302,8 @@
             <label for="irpf-input">
               <span class="irpf-label">% IRPF:</span>
               <input type="number" id="irpf-input" min="0" max="50" step="0.1" value="15" />
-              <span class="irpf-help">Introduce tu porcentaje de retención</span>
+              <button id="irpf-lock-btn" class="lock-btn" title="Bloquear IRPF para que no cambie">🔓</button>
+              <span class="irpf-help">Introduce tu porcentaje de retención y bloquéalo con 🔒</span>
             </label>
           </div>
         </div>
@@ -411,7 +405,7 @@
       <div class="page-hero small">
         <img src="https://i.imgur.com/xcHiyAn.jpeg" alt="Foro">
         <div class="page-hero-content">
-          <h2>Foro de Compañeros</h2>
+          <h2>💬 Foro de Compañeros</h2>
           <p>Comunícate con otros estibadores</p>
         </div>
       </div>
@@ -422,13 +416,16 @@
       <!-- Composer fijo en la parte inferior -->
       <div id="foro-composer" class="foro-composer">
         <div class="foro-composer-inner">
-          <textarea id="foro-input" placeholder="Escribe tu mensaje..." rows="2"></textarea>
-          <button id="foro-send" class="btn-primary">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-              <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
-            </svg>
-            Enviar
-          </button>
+          <textarea id="foro-input" placeholder="Escribe tu mensaje..." rows="2" maxlength="500"></textarea>
+          <div class="foro-composer-actions">
+            <span id="foro-char-count" class="foro-char-count">0/500</span>
+            <button id="foro-send" class="btn-primary">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
+              </svg>
+              Enviar
+            </button>
+          </div>
         </div>
       </div>
     </section>
@@ -578,7 +575,15 @@
         </div>
         <div class="form-group">
           <label for="report-empresa">Empresa *</label>
-          <input type="text" id="report-empresa" placeholder="Ej: MSC, APM, CSP..." required>
+          <select id="report-empresa" required>
+            <option value="">Selecciona una empresa</option>
+            <option value="MSC">MSC</option>
+            <option value="APM">APM</option>
+            <option value="CSP">CSP</option>
+            <option value="VTEU">VTEU</option>
+            <option value="TRASMED">TRASMED</option>
+            <option value="ERH">ERH</option>
+          </select>
         </div>
         <div class="form-group">
           <label for="report-buque">Buque</label>
@@ -660,10 +665,29 @@
       e.preventDefault();
       deferredPrompt = e;
 
-      // Mostrar botón de instalación personalizado
+      // Mostrar botón de instalación solo en la página de login
       console.log('💡 La app puede ser instalada - mostrando botón');
       if (installBtn) {
-        installBtn.classList.add('visible');
+        // Función para verificar si estamos en login
+        const checkAndShowButton = () => {
+          const currentPage = document.querySelector('.page.active')?.id;
+          if (currentPage === 'login') {
+            installBtn.classList.add('visible');
+          } else {
+            installBtn.classList.remove('visible');
+          }
+        };
+
+        // Verificar inmediatamente
+        checkAndShowButton();
+
+        // Verificar cada vez que cambie la página
+        const observer = new MutationObserver(checkAndShowButton);
+        observer.observe(document.getElementById('app'), {
+          attributes: true,
+          subtree: true,
+          attributeFilter: ['class']
+        });
       }
     });
 
