@@ -35,7 +35,7 @@ const SHEETS_CONFIG = {
   URL_TABLA_SALARIOS: 'https://docs.google.com/spreadsheets/d/1j-IaOHXoLEP4bK2hjdn2uAYy8a2chqiQSOw4Nfxoyxc/export?format=csv&gid=1710373929',
 
   // URL del Apps Script (Web App deployada) - ACTUALIZADA
-  APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbxgwhFR-rb-Lqs9YMPnGEbaLVzVepnGJg3EkkVSNDVCSMaB3p2S2AqNcxHruIzsaHxaNA/exec'
+  APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbxn3kv_G0-qDjJwUqOdnOIFMN0zjfz12UbvSdei9VYsJ94y2kVccpFO5ZPF2KSpx862lw/exec'
 };
 
 /**
@@ -725,9 +725,31 @@ const SheetsAPI = {
 
             // Procesar fila completada
             if (currentRow.length >= 3 && !skipHeader) {
-              const timestamp = currentRow[0] ? currentRow[0].trim() : '';
-              const chapa = currentRow[1] ? currentRow[1].trim() : '';
-              const texto = currentRow[2] ? currentRow[2].trim() : '';
+              // Leer columnas
+              let col1 = currentRow[0] ? currentRow[0].trim() : '';
+              let col2 = currentRow[1] ? currentRow[1].trim() : '';
+              let col3 = currentRow[2] ? currentRow[2].trim() : '';
+
+              // CORRECCIÓN AUTOMÁTICA: Detectar si el orden está invertido
+              // Orden correcto: [timestamp, chapa, texto]
+              // Orden incorrecto: [chapa, timestamp, texto]
+              let timestamp, chapa, texto;
+
+              const col1EsNumero = /^\d+$/.test(col1);
+              const col2EsTimestamp = /^\d{4}-\d{2}-\d{2}T/.test(col2);
+
+              if (col1EsNumero && col2EsTimestamp) {
+                // Orden incorrecto detectado - corregir automáticamente
+                timestamp = col2;
+                chapa = col1;
+                texto = col3;
+                console.log('⚠️ Mensaje con columnas invertidas detectado y corregido automáticamente');
+              } else {
+                // Orden correcto
+                timestamp = col1;
+                chapa = col2;
+                texto = col3;
+              }
 
               if (timestamp && chapa && texto) {
                 // Intentar parsear el timestamp
@@ -764,9 +786,29 @@ const SheetsAPI = {
       if (currentField || currentRow.length > 0) {
         currentRow.push(currentField);
         if (currentRow.length >= 3 && !skipHeader) {
-          const timestamp = currentRow[0] ? currentRow[0].trim() : '';
-          const chapa = currentRow[1] ? currentRow[1].trim() : '';
-          const texto = currentRow[2] ? currentRow[2].trim() : '';
+          // Leer columnas
+          let col1 = currentRow[0] ? currentRow[0].trim() : '';
+          let col2 = currentRow[1] ? currentRow[1].trim() : '';
+          let col3 = currentRow[2] ? currentRow[2].trim() : '';
+
+          // CORRECCIÓN AUTOMÁTICA: Detectar si el orden está invertido
+          let timestamp, chapa, texto;
+
+          const col1EsNumero = /^\d+$/.test(col1);
+          const col2EsTimestamp = /^\d{4}-\d{2}-\d{2}T/.test(col2);
+
+          if (col1EsNumero && col2EsTimestamp) {
+            // Orden incorrecto detectado - corregir automáticamente
+            timestamp = col2;
+            chapa = col1;
+            texto = col3;
+            console.log('⚠️ Última fila con columnas invertidas detectada y corregida automáticamente');
+          } else {
+            // Orden correcto
+            timestamp = col1;
+            chapa = col2;
+            texto = col3;
+          }
 
           if (timestamp && chapa && texto) {
             let parsedDate = new Date(timestamp);
@@ -1541,6 +1583,7 @@ function clearSheetsCache() {
 // Exponer API globalmente
 window.SheetsAPI = SheetsAPI;
 window.clearSheetsCache = clearSheetsCache;
+
 
 
 

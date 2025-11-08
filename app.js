@@ -977,17 +977,29 @@ async function loadContratacion() {
     }
 
     // 6. ORDENAR Y MOSTRAR
-    // Ordenar por fecha y jornada
+    // Ordenar por fecha y jornada (cronológicamente)
     const sortedData = data.sort((a, b) => {
-      // Primero por fecha descendente
+      // Primero por fecha descendente (más reciente primero)
       const dateA = new Date(a.fecha.split('/').reverse().join('-'));
       const dateB = new Date(b.fecha.split('/').reverse().join('-'));
       if (dateB.getTime() !== dateA.getTime()) {
         return dateB - dateA;
       }
-      // Luego por jornada
-      const jornadaOrder = { '02-08': 1, '08-14': 2, '14-20': 3, '20-02': 4 };
-      return (jornadaOrder[a.jornada] || 99) - (jornadaOrder[b.jornada] || 99);
+
+      // Para el mismo día: ordenar por hora de inicio de jornada (cronológicamente)
+      // Normalizar jornadas para comparación consistente
+      const jornadaNormA = normalizeJornada(a.jornada);
+      const jornadaNormB = normalizeJornada(b.jornada);
+
+      // Orden cronológico por hora de inicio: 02-08, 08-14, 14-20, 20-02
+      const jornadaOrder = {
+        '02-08': 1,
+        '08-14': 2,
+        '14-20': 3,
+        '20-02': 4
+      };
+
+      return (jornadaOrder[jornadaNormA] || 99) - (jornadaOrder[jornadaNormB] || 99);
     });
 
     loading.classList.add('hidden');
