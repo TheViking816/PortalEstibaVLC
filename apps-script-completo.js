@@ -106,7 +106,7 @@ function addMessage(params) {
       }
     }
 
-    sheet.appendRow([chapa, timestamp, texto]);
+    sheet.appendRow([timestamp, chapa, texto]);
     Logger.log(`✅ Mensaje añadido: ${chapa}`);
     return jsonResponse(true, null, 'Mensaje agregado');
 
