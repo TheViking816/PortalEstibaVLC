@@ -821,9 +821,9 @@ const SheetsAPI = {
         },
         body: JSON.stringify({
           action: 'addMessage',
+          timestamp: new Date().toISOString(),
           chapa: chapa,
-          texto: texto,
-          timestamp: new Date().toISOString()
+          texto: texto
         })
       });
 
@@ -1181,7 +1181,8 @@ const SheetsAPI = {
    */
   async getMapeoPuestos() {
     try {
-      const data = await fetchSheetData(SHEETS_CONFIG.SHEET_ID, SHEETS_CONFIG.GID_MAPEO_PUESTOS);
+      // IMPORTANTE: No usar caché para mapeo de puestos (siempre datos frescos)
+      const data = await fetchSheetData(SHEETS_CONFIG.SHEET_ID, SHEETS_CONFIG.GID_MAPEO_PUESTOS, false);
 
       console.log('📋 Datos raw de mapeo_puestos:', data.slice(0, 3)); // Primeros 3 registros
 
@@ -1219,7 +1220,8 @@ const SheetsAPI = {
    */
   async getTablaSalarial() {
     try {
-      const data = await fetchSheetData(SHEETS_CONFIG.SHEET_ID, SHEETS_CONFIG.GID_TABLA_SALARIOS);
+      // IMPORTANTE: No usar caché para tabla salarial (siempre datos frescos)
+      const data = await fetchSheetData(SHEETS_CONFIG.SHEET_ID, SHEETS_CONFIG.GID_TABLA_SALARIOS, false);
 
       console.log('📋 Datos raw de tabla_salarios:', data.slice(0, 3)); // Primeros 3 registros
 
@@ -1240,7 +1242,30 @@ const SheetsAPI = {
         coef_prima_mayor120: parseEuropeanFloat(row.Coef_Prima_Mayor120 || row.coef_prima_mayor120)
       })).filter(item => item.clave_jornada);
 
-      console.log(`✅ Tabla salarial cargada: ${tablaSalarial.length} registros`);
+      // WORKAROUND FORZADO: Añadir claves de sábado manualmente SIEMPRE
+      const clavesNecesarias = [
+        { clave_jornada: '08-14_SABADO', jornal_base_g1: 145.42, jornal_base_g2: 150.62, prima_minima_coches: 60.31, coef_prima_menor120: 0.374, coef_prima_mayor120: 0.612 },
+        { clave_jornada: '14-20_SABADO', jornal_base_g1: 206.37, jornal_base_g2: 210.95, prima_minima_coches: 78.16, coef_prima_menor120: 0.674, coef_prima_mayor120: 0.786 },
+        { clave_jornada: '20-02_SABADO', jornal_base_g1: 299.3, jornal_base_g2: 303.88, prima_minima_coches: 78.16, coef_prima_menor120: 0.974, coef_prima_mayor120: 1.045 }
+      ];
+
+      console.warn('🔧 APLICANDO WORKAROUND DE SÁBADOS...');
+
+      clavesNecesarias.forEach(clave => {
+        // Eliminar si existe para reemplazar
+        const index = tablaSalarial.findIndex(t => t.clave_jornada === clave.clave_jornada);
+        if (index !== -1) {
+          tablaSalarial.splice(index, 1);
+          console.warn(`🔄 Reemplazando clave: ${clave.clave_jornada}`);
+        } else {
+          console.warn(`➕ Añadiendo clave nueva: ${clave.clave_jornada}`);
+        }
+        tablaSalarial.push(clave);
+      });
+
+      console.warn('✅ WORKAROUND APLICADO - Claves de sábado forzadas en memoria');
+
+      console.log(`✅ Tabla salarial cargada: ${tablaSalarial.length} registros (${tablaSalarial.length - data.length} añadidos manualmente)`);
       if (tablaSalarial.length > 0) {
         console.log('📝 Ejemplo de tabla salarial:', tablaSalarial[0]);
       }

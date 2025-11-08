@@ -2432,13 +2432,11 @@ function determinarTipoDia(fecha, jornada) {
     const esFestivoManana = esFestivoFecha(diaSiguiente);
 
     if (jornada === '02-08') {
-      // EXCEPCIÓN: Sábado siempre es LABORABLE en jornada 02-08
+      // Jornada 02-08: empieza de noche y termina por la mañana
+      // IMPORTANTE: Sábado siempre se considera LABORABLE en jornada 02-08
       if (dayOfWeek === 6) {
         return 'LABORABLE';
-      }
-
-      // Jornada 02-08: empieza de noche y termina por la mañana
-      if (esFestivoHoy && !esFestivoManana) {
+      } else if (esFestivoHoy && !esFestivoManana) {
         return 'FEST-LAB';
       } else if (esFestivoManana) {
         return 'FESTIVO';
@@ -2447,12 +2445,13 @@ function determinarTipoDia(fecha, jornada) {
       }
     } else if (jornada === '20-02') {
       // Jornada 20-02: empieza de tarde y termina de madrugada
-      if (!esFestivoHoy && esFestivoManana) {
+      // IMPORTANTE: Sábado tiene prioridad sobre LAB-FEST (sábado a domingo)
+      if (dayOfWeek === 6) {
+        return 'SABADO';
+      } else if (!esFestivoHoy && esFestivoManana) {
         return 'LAB-FEST';
       } else if (esFestivoHoy) {
         return 'FESTIVO';
-      } else if (dayOfWeek === 6) {
-        return 'SABADO';
       } else {
         return 'LABORABLE';
       }
@@ -2631,11 +2630,10 @@ async function loadSueldometro() {
       const salarioInfo = tablaSalarial.find(s => s.clave_jornada === claveJornada);
 
       if (!salarioInfo) {
-        console.warn(`⚠️ Clave de jornada no encontrada: "${claveJornada}"`);
-        if (index === 0) {
-          console.log('Claves disponibles en tabla salarial:', tablaSalarial.map(t => t.clave_jornada));
-        }
-        return { ...jornal, salario_base: 0, prima: 0, total: 0, error: 'Jornada no encontrada' };
+        console.error(`❌ Clave de jornada NO encontrada: "${claveJornada}"`);
+        console.log('📋 Claves disponibles:', tablaSalarial.map(t => `"${t.clave_jornada}"`).join(', '));
+        console.log('🔍 Buscando:', `"${claveJornada}" (Fecha: ${jornal.fecha}, Jornada: ${jornada}, Tipo día: ${tipoDia})`);
+        return { ...jornal, salario_base: 0, prima: 0, total: 0, error: `Jornada no encontrada: ${claveJornada}` };
       }
 
       // Debug del primer jornal
@@ -2805,8 +2803,8 @@ async function loadSueldometro() {
       // No hay relevo en 02-08
       if (jornada === '02-08') return null;
 
-      // Tarifa especial para sábados 20-02 (20-21 sábado a 02-03 lunes)
-      if (jornada === '20-02' && tipoDia === 'SABADO') {
+      // Tarifa especial para sábados desde 14-20 hasta 20-02
+      if (tipoDia === 'SABADO' && (jornada === '14-20' || jornada === '20-02')) {
         return 93.55;
       }
 
@@ -4014,6 +4012,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initReportJornal();
   initForoEnhanced();
 });
+
 
 
 
