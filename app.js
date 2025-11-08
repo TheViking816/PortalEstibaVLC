@@ -276,6 +276,15 @@ function setupEventListeners() {
       }
     });
   }
+
+  // Botón de scroll hacia abajo en el foro
+  const scrollToBottomBtn = document.getElementById('scroll-to-bottom-btn');
+  if (scrollToBottomBtn) {
+    scrollToBottomBtn.addEventListener('click', scrollToBottomForo);
+  }
+
+  // Detectar scroll en el contenedor de mensajes del foro
+  initForoScrollDetection();
 }
 
 /**
@@ -2109,7 +2118,13 @@ function renderForoMessages(messages) {
   // Usar requestAnimationFrame para asegurar que el DOM esté renderizado
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      container.scrollTop = container.scrollHeight;
+      // Agregar un pequeño offset adicional para asegurar que se ve el último mensaje completo
+      container.scrollTop = container.scrollHeight + 100;
+
+      // Timeout adicional para asegurar que todo esté renderizado
+      setTimeout(() => {
+        container.scrollTop = container.scrollHeight + 100;
+      }, 100);
     });
   });
 }
@@ -2175,7 +2190,10 @@ async function sendForoMessage() {
         await loadForo();
         const container = document.getElementById('foro-messages');
         if (container) {
-          container.scrollTop = container.scrollHeight;
+          // Agregar offset para asegurar scroll completo al final
+          setTimeout(() => {
+            container.scrollTop = container.scrollHeight + 100;
+          }, 150);
         }
 
         // Restaurar botón
@@ -2195,7 +2213,9 @@ async function sendForoMessage() {
       // Scroll al final
       const container = document.getElementById('foro-messages');
       if (container) {
-        container.scrollTop = container.scrollHeight;
+        setTimeout(() => {
+          container.scrollTop = container.scrollHeight + 100;
+        }, 100);
       }
 
       // Limpiar y restaurar
@@ -2216,7 +2236,9 @@ async function sendForoMessage() {
     // Scroll al final
     const container = document.getElementById('foro-messages');
     if (container) {
-      container.scrollTop = container.scrollHeight;
+      setTimeout(() => {
+        container.scrollTop = container.scrollHeight + 100;
+      }, 100);
     }
 
     // Limpiar y restaurar
@@ -2226,6 +2248,46 @@ async function sendForoMessage() {
     sendBtn.disabled = false;
     input.focus();
   }
+}
+
+/**
+ * Scroll suave hacia el final del foro
+ */
+function scrollToBottomForo() {
+  const container = document.getElementById('foro-messages');
+  if (container) {
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior: 'smooth'
+    });
+  }
+}
+
+/**
+ * Inicializa la detección de scroll en el foro
+ */
+function initForoScrollDetection() {
+  const container = document.getElementById('foro-messages');
+  const scrollBtn = document.getElementById('scroll-to-bottom-btn');
+
+  if (!container || !scrollBtn) return;
+
+  // Función para verificar la posición del scroll
+  const checkScrollPosition = () => {
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+
+    if (isNearBottom) {
+      scrollBtn.style.display = 'none';
+    } else {
+      scrollBtn.style.display = 'flex';
+    }
+  };
+
+  // Agregar event listener al scroll del container
+  container.addEventListener('scroll', checkScrollPosition);
+
+  // Verificar posición inicial
+  checkScrollPosition();
 }
 
 // Agregar estilo de animación spin si no existe
@@ -2490,11 +2552,39 @@ async function loadSueldometro() {
     // 1. Cargar datos necesarios
     console.log('📊 Cargando datos del Sueldómetro...');
 
-    const [jornales, mapeoPuestos, tablaSalarial] = await Promise.all([
+    const [jornales, mapeoPuestos, tablaSalarialRaw] = await Promise.all([
       SheetsAPI.getJornalesHistoricoAcumulado(AppState.currentUser), // Ya incluye manuales
       SheetsAPI.getMapeoPuestos(),
       SheetsAPI.getTablaSalarial()
     ]);
+
+    // Aplicar correcciones para valores de sábado (valores correctos de TABLA_SALARIOS)
+    const tablaSalarial = tablaSalarialRaw.map(row => {
+      // Correcciones específicas para jornadas de sábado
+      if (row.clave_jornada === '08-14_SABADO') {
+        return {
+          ...row,
+          jornal_base_g2: 150.62,
+          coef_prima_menor120: 0.374,
+          coef_prima_mayor120: 0.612
+        };
+      } else if (row.clave_jornada === '14-20_SABADO') {
+        return {
+          ...row,
+          jornal_base_g2: 210.95,
+          coef_prima_menor120: 0.674,
+          coef_prima_mayor120: 0.786
+        };
+      } else if (row.clave_jornada === '20-02_SABADO') {
+        return {
+          ...row,
+          jornal_base_g2: 303.88,
+          coef_prima_menor120: 0.974,
+          coef_prima_mayor120: 1.045
+        };
+      }
+      return row;
+    });
 
     const manuales = jornales.filter(j => j.manual).length;
     const automaticos = jornales.length - manuales;
