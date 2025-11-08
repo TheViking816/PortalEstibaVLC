@@ -767,13 +767,14 @@ function closeSidebar() {
 }
 
 /**
- * Carga la página de contratación
- * LÓGICA ROBUSTA:
- * 1. Lee contrataciones del CSV
- * 2. Guarda en localStorage con timestamp
- * 3. Muestra desde localStorage (persistente hasta medianoche)
- * 4. Jornada 02-08: se muestra hasta medianoche del día siguiente
- * 5. Otras jornadas: se muestran hasta medianoche del día de contratación
+ * Carga la página de contratación - Mi Contratación
+ * LÓGICA SIMPLIFICADA:
+ * 1. Lee DIRECTAMENTE de Jornales_Historico_Acumulado (Google Sheets)
+ * 2. Filtra jornales para HOY, MAÑANA y PASADO MAÑANA
+ * 3. Ordena por fecha ascendente (hoy → mañana → pasado mañana)
+ * 4. Dentro del mismo día, ordena por jornada cronológica (02-08, 08-14, 14-20, 20-02)
+ * 5. Muestra los jornales durante todo el día hasta medianoche
+ * 6. NO usa caché - siempre datos frescos de Sheets
  */
 async function loadContratacion() {
   const container = document.getElementById('contratacion-content');
@@ -789,6 +790,8 @@ async function loadContratacion() {
     const hoy = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
     const manana = new Date(hoy);
     manana.setDate(manana.getDate() + 1);
+    const pasadoManana = new Date(hoy);
+    pasadoManana.setDate(pasadoManana.getDate() + 2);
 
     const formatFecha = (fecha) => {
       const dd = String(fecha.getDate()).padStart(2, '0');
@@ -799,58 +802,13 @@ async function loadContratacion() {
 
     const fechaHoy = formatFecha(hoy);
     const fechaManana = formatFecha(manana);
+    const fechaPasadoManana = formatFecha(pasadoManana);
 
-    console.log('=== CONTRATACIONES - MODO ROBUSTO ===');
+    console.log('=== CONTRATACIONES - LECTURA DIRECTA DE SHEETS ===');
     console.log('Fecha hoy:', fechaHoy);
+    console.log('Fecha mañana:', fechaManana);
+    console.log('Fecha pasado mañana:', fechaPasadoManana);
     console.log('Hora actual:', ahora.toTimeString().substring(0, 5));
-
-    // 1. INTENTAR LEER DEL CSV Y ACTUALIZAR LOCALSTORAGE
-    let contratacionesActualizadas = false;
-    try {
-      const allData = await SheetsAPI.getContrataciones(AppState.currentUser);
-      console.log(`📥 CSV: ${allData.length} contrataciones obtenidas`);
-
-      if (allData.length > 0) {
-        // Obtener caché actual
-        let cacheContrataciones = JSON.parse(localStorage.getItem('contrataciones_cache') || '{}');
-        const userKey = AppState.currentUser;
-
-        // Inicializar si no existe
-        if (!cacheContrataciones[userKey]) {
-          cacheContrataciones[userKey] = [];
-        }
-
-        // Agregar nuevas contrataciones al caché (evitar duplicados)
-        allData.forEach(nueva => {
-          const existe = cacheContrataciones[userKey].some(c =>
-            c.fecha === nueva.fecha &&
-            c.jornada === nueva.jornada &&
-            c.puesto === nueva.puesto
-          );
-          if (!existe) {
-            cacheContrataciones[userKey].push({
-              ...nueva,
-              timestamp_guardado: new Date().toISOString()
-            });
-            console.log(`✅ Nueva contratación guardada: ${nueva.jornada} - ${nueva.fecha}`);
-          }
-        });
-
-        // Guardar caché actualizado
-        localStorage.setItem('contrataciones_cache', JSON.stringify(cacheContrataciones));
-        contratacionesActualizadas = true;
-        console.log(`💾 Caché actualizado: ${cacheContrataciones[userKey].length} total`);
-      }
-    } catch (error) {
-      console.warn('⚠️ No se pudo leer del CSV:', error.message);
-    }
-
-    // 2. LEER DESDE LOCALSTORAGE (FUENTE PRINCIPAL DE VISUALIZACIÓN)
-    const cacheContrataciones = JSON.parse(localStorage.getItem('contrataciones_cache') || '{}');
-    const userKey = AppState.currentUser;
-    const allCachedData = cacheContrataciones[userKey] || [];
-
-    console.log(`📂 localStorage: ${allCachedData.length} contrataciones en caché`);
 
     // Normalizar formato de jornada
     const normalizeJornada = (jornada) => {
@@ -861,133 +819,30 @@ async function loadContratacion() {
       return norm;
     };
 
-    // 3. FILTRAR CONTRATACIONES VÁLIDAS (hoy y mañana)
-    let data = allCachedData.filter(item => {
-      // Mostrar todas las contrataciones de HOY y de MAÑANA
-      if (item.fecha === fechaHoy || item.fecha === fechaManana) {
-        return true;
-      }
+    // LEER DIRECTAMENTE DE JORNALES_HISTORICO_ACUMULADO
+    console.log('📥 Leyendo jornales desde Jornales_Historico_Acumulado...');
+    const jornalesHistorico = await SheetsAPI.getJornalesHistoricoAcumulado(AppState.currentUser);
+    console.log(`✅ ${jornalesHistorico.length} jornales obtenidos de Sheets`);
 
-      return false;
+    // Filtrar jornales de HOY, MAÑANA y PASADO MAÑANA
+    const data = jornalesHistorico.filter(jornal => {
+      return jornal.fecha === fechaHoy ||
+             jornal.fecha === fechaManana ||
+             jornal.fecha === fechaPasadoManana;
     });
 
-    console.log(`📊 localStorage: ${data.length} contrataciones válidas para hoy`);
+    console.log(`📊 ${data.length} jornales filtrados para los próximos 3 días`);
 
-    // 3.1 FALLBACK: Si no hay datos en localStorage, buscar en Jornales_Historico_Acumulado
-    if (data.length === 0) {
-      console.log('🔍 No hay datos en localStorage, buscando en Sheets (Jornales_Historico_Acumulado)...');
-      try {
-        const jornalesHistorico = await SheetsAPI.getJornalesHistoricoAcumulado(AppState.currentUser);
-        console.log(`📥 Sheets: ${jornalesHistorico.length} jornales obtenidos del histórico`);
-
-        // Filtrar jornales de HOY y MAÑANA
-        const jornalesHoy = jornalesHistorico.filter(jornal => {
-          // Mostrar todos los jornales de hoy y de mañana
-          if (jornal.fecha === fechaHoy || jornal.fecha === fechaManana) {
-            return true;
-          }
-          return false;
-        });
-
-        if (jornalesHoy.length > 0) {
-          console.log(`✅ Sheets: ${jornalesHoy.length} jornales de hoy encontrados`);
-
-          // Convertir formato de Sheets a formato de contratación
-          data = jornalesHoy.map(jornal => ({
-            chapa: jornal.chapa,
-            fecha: jornal.fecha,
-            jornada: jornal.jornada,
-            puesto: jornal.puesto,
-            empresa: jornal.empresa || '',
-            buque: jornal.buque || '',
-            parte: jornal.parte || '',
-            logo_url: jornal.logo_url || '',
-            timestamp_guardado: new Date().toISOString()
-          }));
-
-          // Guardar en localStorage para próximas cargas
-          if (!cacheContrataciones[userKey]) {
-            cacheContrataciones[userKey] = [];
-          }
-          data.forEach(nueva => {
-            const existe = cacheContrataciones[userKey].some(c =>
-              c.fecha === nueva.fecha &&
-              c.jornada === nueva.jornada &&
-              c.puesto === nueva.puesto
-            );
-            if (!existe) {
-              cacheContrataciones[userKey].push(nueva);
-            }
-          });
-          localStorage.setItem('contrataciones_cache', JSON.stringify(cacheContrataciones));
-          console.log('💾 Datos de Sheets guardados en localStorage');
-        } else {
-          console.log('ℹ️ No hay jornales de hoy en Sheets');
-        }
-      } catch (error) {
-        console.error('❌ Error al buscar en Sheets:', error);
-      }
-    }
-
-    console.log(`📊 Mostrando: ${data.length} contrataciones válidas`);
-
-    // 4. LIMPIAR CONTRATACIONES ANTIGUAS DEL CACHÉ (después de medianoche)
-    const dataLimpia = allCachedData.filter(item => {
-      // Mantener contrataciones de hoy y mañana
-      if (item.fecha === fechaHoy || item.fecha === fechaManana) {
-        return true;
-      }
-
-      // Eliminar contrataciones antiguas
-      return false;
-    });
-
-    if (dataLimpia.length !== allCachedData.length) {
-      cacheContrataciones[userKey] = dataLimpia;
-      localStorage.setItem('contrataciones_cache', JSON.stringify(cacheContrataciones));
-      console.log(`🗑️ Limpieza: ${allCachedData.length - dataLimpia.length} contrataciones antiguas eliminadas`);
-    }
-
-    // 5. GUARDAR EN HISTÓRICO DE JORNALES (para "Mis Jornales")
-    if (data.length > 0) {
-      const historico = JSON.parse(localStorage.getItem('jornales_historico') || '[]');
-
-      data.forEach(nueva => {
-        const existe = historico.some(h =>
-          h.fecha === nueva.fecha &&
-          h.jornada === nueva.jornada &&
-          h.puesto === nueva.puesto &&
-          h.chapa === nueva.chapa
-        );
-        if (!existe) {
-          historico.push(nueva);
-        }
-      });
-
-      localStorage.setItem('jornales_historico', JSON.stringify(historico));
-      console.log(`💾 Histórico actualizado: ${historico.length} jornales totales`);
-
-      // Sincronizar con Google Sheets (background)
-      try {
-        await SheetsAPI.sincronizarJornalesBackup(AppState.currentUser, historico.filter(h => h.chapa === AppState.currentUser));
-        console.log('✅ Sincronizado con Google Sheets');
-      } catch (syncError) {
-        console.warn('⚠️ Sincronización fallida:', syncError);
-      }
-    }
-
-    // 6. ORDENAR Y MOSTRAR
-    // Ordenar por fecha y jornada (cronológicamente)
+    // ORDENAR por fecha ascendente y jornada cronológica
     const sortedData = data.sort((a, b) => {
-      // Primero por fecha descendente (más reciente primero)
+      // Primero por fecha ascendente (más antiguo primero: hoy, mañana, pasado mañana)
       const dateA = new Date(a.fecha.split('/').reverse().join('-'));
       const dateB = new Date(b.fecha.split('/').reverse().join('-'));
-      if (dateB.getTime() !== dateA.getTime()) {
-        return dateB - dateA;
+      if (dateA.getTime() !== dateB.getTime()) {
+        return dateA - dateB;
       }
 
       // Para el mismo día: ordenar por hora de inicio de jornada (cronológicamente)
-      // Normalizar jornadas para comparación consistente
       const jornadaNormA = normalizeJornada(a.jornada);
       const jornadaNormB = normalizeJornada(b.jornada);
 
