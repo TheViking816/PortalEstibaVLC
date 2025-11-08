@@ -2803,8 +2803,10 @@ async function loadSueldometro() {
       // No hay relevo en 02-08
       if (jornada === '02-08') return null;
 
-      // Tarifa especial para sábados desde 14-20 hasta 20-02
-      if (tipoDia === 'SABADO' && (jornada === '14-20' || jornada === '20-02')) {
+      // Tarifa especial 93,55€ para:
+      // - Festivos y domingos (cualquier tipo de día que incluya FEST)
+      // - Sábados desde 14-20 hasta 20-02
+      if (tipoDia.includes('FEST') || (tipoDia === 'SABADO' && (jornada === '14-20' || jornada === '20-02'))) {
         return 93.55;
       }
 
