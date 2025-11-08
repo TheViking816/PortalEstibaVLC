@@ -2118,13 +2118,13 @@ function renderForoMessages(messages) {
   // Usar requestAnimationFrame para asegurar que el DOM esté renderizado
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      // Agregar un pequeño offset adicional para asegurar que se ve el último mensaje completo
-      container.scrollTop = container.scrollHeight + 100;
-
-      // Timeout adicional para asegurar que todo esté renderizado
-      setTimeout(() => {
-        container.scrollTop = container.scrollHeight + 100;
-      }, 100);
+      // Hacer scroll al último mensaje para asegurar que se vea completamente
+      const lastMessage = container.lastElementChild;
+      if (lastMessage) {
+        lastMessage.scrollIntoView({ behavior: 'auto', block: 'end' });
+      } else {
+        container.scrollTop = container.scrollHeight;
+      }
     });
   });
 }
@@ -2167,14 +2167,34 @@ async function sendForoMessage() {
     texto: texto
   };
 
-  // Intentar enviar a Google Apps Script
+  // Añadir mensaje inmediatamente a la vista (optimistic update)
+  const messages = getForoMessagesLocal();
+  messages.push(newMessage);
+  localStorage.setItem('foro_messages', JSON.stringify(messages));
+  renderForoMessages(messages);
+
+  // Limpiar input inmediatamente
+  input.value = '';
+
+  // Scroll al final
+  const container = document.getElementById('foro-messages');
+  if (container) {
+    const lastMessage = container.lastElementChild;
+    if (lastMessage) {
+      lastMessage.scrollIntoView({ behavior: 'auto', block: 'end' });
+    } else {
+      container.scrollTop = container.scrollHeight;
+    }
+  }
+
+  // Enviar a Google Apps Script en segundo plano
   try {
     const sentToCloud = await SheetsAPI.enviarMensajeForo(AppState.currentUser, texto);
 
     if (sentToCloud) {
-      console.log('Mensaje enviado a Google Sheets');
+      console.log('✅ Mensaje enviado a Google Sheets');
 
-      // Mostrar mensaje de éxito
+      // Mostrar feedback visual breve de éxito
       sendBtn.innerHTML = `
         <svg style="width: 20px; height: 20px;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
@@ -2182,67 +2202,23 @@ async function sendForoMessage() {
         <span style="margin-left: 8px;">Enviado</span>
       `;
 
-      // Limpiar input
-      input.value = '';
-
-      // Esperar un poco y recargar para mostrar el mensaje
-      setTimeout(async () => {
-        await loadForo();
-        const container = document.getElementById('foro-messages');
-        if (container) {
-          // Agregar offset para asegurar scroll completo al final
-          setTimeout(() => {
-            container.scrollTop = container.scrollHeight + 100;
-          }, 150);
-        }
-
-        // Restaurar botón
+      setTimeout(() => {
         sendBtn.innerHTML = originalBtnHTML;
         input.disabled = false;
         sendBtn.disabled = false;
         input.focus();
-      }, 1000);
+      }, 800);
     } else {
-      // Fallback a localStorage
-      console.log('Usando localStorage para mensajes');
-      const messages = getForoMessagesLocal();
-      messages.push(newMessage);
-      localStorage.setItem('foro_messages', JSON.stringify(messages));
-      renderForoMessages(messages);
-
-      // Scroll al final
-      const container = document.getElementById('foro-messages');
-      if (container) {
-        setTimeout(() => {
-          container.scrollTop = container.scrollHeight + 100;
-        }, 100);
-      }
-
-      // Limpiar y restaurar
-      input.value = '';
+      console.log('⚠️ No se pudo enviar al servidor, guardado localmente');
+      // Restaurar botón
       sendBtn.innerHTML = originalBtnHTML;
       input.disabled = false;
       sendBtn.disabled = false;
       input.focus();
     }
   } catch (error) {
-    console.error('Error enviando mensaje:', error);
-    // Fallback a localStorage
-    const messages = getForoMessagesLocal();
-    messages.push(newMessage);
-    localStorage.setItem('foro_messages', JSON.stringify(messages));
-    renderForoMessages(messages);
-
-    // Scroll al final
-    const container = document.getElementById('foro-messages');
-    if (container) {
-      setTimeout(() => {
-        container.scrollTop = container.scrollHeight + 100;
-      }, 100);
-    }
-
-    // Limpiar y restaurar
-    input.value = '';
+    console.error('❌ Error enviando mensaje al servidor:', error);
+    // El mensaje ya está visible localmente, solo restauramos el botón
     sendBtn.innerHTML = originalBtnHTML;
     input.disabled = false;
     sendBtn.disabled = false;
@@ -2256,10 +2232,16 @@ async function sendForoMessage() {
 function scrollToBottomForo() {
   const container = document.getElementById('foro-messages');
   if (container) {
-    container.scrollTo({
-      top: container.scrollHeight,
-      behavior: 'smooth'
-    });
+    // Hacer scroll al último mensaje para asegurar que se vea completamente
+    const lastMessage = container.lastElementChild;
+    if (lastMessage) {
+      lastMessage.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    } else {
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
   }
 }
 
@@ -2552,39 +2534,11 @@ async function loadSueldometro() {
     // 1. Cargar datos necesarios
     console.log('📊 Cargando datos del Sueldómetro...');
 
-    const [jornales, mapeoPuestos, tablaSalarialRaw] = await Promise.all([
+    const [jornales, mapeoPuestos, tablaSalarial] = await Promise.all([
       SheetsAPI.getJornalesHistoricoAcumulado(AppState.currentUser), // Ya incluye manuales
       SheetsAPI.getMapeoPuestos(),
       SheetsAPI.getTablaSalarial()
     ]);
-
-    // Aplicar correcciones para valores de sábado (valores correctos de TABLA_SALARIOS)
-    const tablaSalarial = tablaSalarialRaw.map(row => {
-      // Correcciones específicas para jornadas de sábado
-      if (row.clave_jornada === '08-14_SABADO') {
-        return {
-          ...row,
-          jornal_base_g2: 150.62,
-          coef_prima_menor120: 0.374,
-          coef_prima_mayor120: 0.612
-        };
-      } else if (row.clave_jornada === '14-20_SABADO') {
-        return {
-          ...row,
-          jornal_base_g2: 210.95,
-          coef_prima_menor120: 0.674,
-          coef_prima_mayor120: 0.786
-        };
-      } else if (row.clave_jornada === '20-02_SABADO') {
-        return {
-          ...row,
-          jornal_base_g2: 303.88,
-          coef_prima_menor120: 0.974,
-          coef_prima_mayor120: 1.045
-        };
-      }
-      return row;
-    });
 
     const manuales = jornales.filter(j => j.manual).length;
     const automaticos = jornales.length - manuales;
@@ -4060,7 +4014,6 @@ document.addEventListener('DOMContentLoaded', () => {
   initReportJornal();
   initForoEnhanced();
 });
-
 
 
 
