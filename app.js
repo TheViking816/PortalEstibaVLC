@@ -861,17 +861,10 @@ async function loadContratacion() {
       return norm;
     };
 
-    // 3. FILTRAR CONTRATACIONES VÁLIDAS (según horario de medianoche)
+    // 3. FILTRAR CONTRATACIONES VÁLIDAS (hoy y mañana)
     let data = allCachedData.filter(item => {
-      const jornadaNorm = normalizeJornada(item.jornada);
-
-      // Jornada 02-08 con fecha de mañana: mostrar hasta medianoche de mañana
-      if (jornadaNorm === '02-08' && item.fecha === fechaManana) {
-        return true;
-      }
-
-      // Cualquier jornada con fecha de hoy: mostrar hasta medianoche de hoy
-      if (item.fecha === fechaHoy) {
+      // Mostrar todas las contrataciones de HOY y de MAÑANA
+      if (item.fecha === fechaHoy || item.fecha === fechaManana) {
         return true;
       }
 
@@ -887,14 +880,10 @@ async function loadContratacion() {
         const jornalesHistorico = await SheetsAPI.getJornalesHistoricoAcumulado(AppState.currentUser);
         console.log(`📥 Sheets: ${jornalesHistorico.length} jornales obtenidos del histórico`);
 
-        // Filtrar solo jornales de HOY
+        // Filtrar jornales de HOY y MAÑANA
         const jornalesHoy = jornalesHistorico.filter(jornal => {
-          if (jornal.fecha === fechaHoy) {
-            return true;
-          }
-          // También incluir 02-08 de mañana
-          const jornadaNorm = normalizeJornada(jornal.jornada);
-          if (jornadaNorm === '02-08' && jornal.fecha === fechaManana) {
+          // Mostrar todos los jornales de hoy y de mañana
+          if (jornal.fecha === fechaHoy || jornal.fecha === fechaManana) {
             return true;
           }
           return false;
@@ -944,13 +933,10 @@ async function loadContratacion() {
 
     // 4. LIMPIAR CONTRATACIONES ANTIGUAS DEL CACHÉ (después de medianoche)
     const dataLimpia = allCachedData.filter(item => {
-      const jornadaNorm = normalizeJornada(item.jornada);
-
-      // Mantener 02-08 de mañana
-      if (jornadaNorm === '02-08' && item.fecha === fechaManana) return true;
-
-      // Mantener contrataciones de hoy
-      if (item.fecha === fechaHoy) return true;
+      // Mantener contrataciones de hoy y mañana
+      if (item.fecha === fechaHoy || item.fecha === fechaManana) {
+        return true;
+      }
 
       // Eliminar contrataciones antiguas
       return false;
@@ -2431,8 +2417,13 @@ function determinarTipoDia(fecha, jornada) {
     diaSiguiente.setDate(diaSiguiente.getDate() + 1);
     const esFestivoManana = esFestivoFecha(diaSiguiente);
 
+    // Para 02-08 también necesitamos revisar el día anterior
+    const diaAnterior = new Date(dateObj);
+    diaAnterior.setDate(diaAnterior.getDate() - 1);
+    const esFestivoAyer = esFestivoFecha(diaAnterior);
+
     if (jornada === '02-08') {
-      // Jornada 02-08: empieza de noche y termina por la mañana
+      // Jornada 02-08: empieza de noche (02:00) y termina por la mañana (08:00)
       // IMPORTANTE: Sábado siempre se considera LABORABLE en jornada 02-08
       if (dayOfWeek === 6) {
         return 'LABORABLE';
@@ -2440,6 +2431,9 @@ function determinarTipoDia(fecha, jornada) {
         return 'FEST-LAB';
       } else if (esFestivoManana) {
         return 'FESTIVO';
+      } else if (esFestivoAyer && !esFestivoHoy) {
+        // Si ayer fue festivo y hoy no → FEST-LAB (ej: domingo festivo → lunes 02-08)
+        return 'FEST-LAB';
       } else {
         return 'LABORABLE';
       }
@@ -2819,9 +2813,8 @@ async function loadSueldometro() {
       const tarifasRemate = {
         '02-08': {
           'LABORABLE': 61.40,
-          'FEST. A LAB.': 70.36,
-          'FESTIVO': 110.57,
-          'FEST. A FEST.': 120.53
+          'FEST-LAB': 70.36,
+          'FESTIVO': 110.57
         },
         '06-12': {
           'LABORABLE': 41.13,
@@ -2839,10 +2832,9 @@ async function loadSueldometro() {
         },
         '20-02': {
           'LABORABLE': 43.51,
-          'LAB A FEST': 99.25,
+          'LAB-FEST': 99.25,
           'SABADO': 76.85,
-          'FEST. A LAB.': 88.20,
-          'FEST. A FEST.': 99.60
+          'FEST-LAB': 88.20
         }
       };
 
