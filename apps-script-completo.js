@@ -453,7 +453,7 @@ function importarCSVManualmente() {
 
 /**
  * Pivotea de contrata_glide a Jornales_Historico_Acumulado
- * Evita duplicados por clave: Fecha|Chapa|Puesto
+ * Evita duplicados por clave: Fecha|Chapa|Puesto|Jornada
  * RETORNA número de filas agregadas
  */
 function pivotContrataGlideToJornales() {
@@ -471,12 +471,12 @@ function pivotContrataGlideToJornales() {
   const existingSet = new Set();
 
   if (lastRowDestino >= 2) {
-    const existingData = sheetDestino.getRange(2, 1, lastRowDestino - 1, 3).getValues();
+    const existingData = sheetDestino.getRange(2, 1, lastRowDestino - 1, 4).getValues();
     existingData.forEach(row => {
-      const [fecha, chapa, puesto] = row;
-      if (fecha && chapa && puesto) {
+      const [fecha, chapa, puesto, jornada] = row;
+      if (fecha && chapa && puesto && jornada) {
         const fechaStr = fecha instanceof Date ? fecha.toISOString().split('T')[0] : String(fecha).trim();
-        existingSet.add(`${fechaStr}|${String(chapa).trim()}|${String(puesto).trim()}`);
+        existingSet.add(`${fechaStr}|${String(chapa).trim()}|${String(puesto).trim()}|${String(jornada).trim()}`);
       }
     });
   }
@@ -500,11 +500,12 @@ function pivotContrataGlideToJornales() {
       if (!chapa) return;
 
       const fechaStr = fecha instanceof Date ? fecha.toISOString().split('T')[0] : String(fecha).trim();
-      const key = `${fechaStr}|${String(chapa).trim()}|${puestos[i]}`;
+      const jornadaStr = String(jornada).trim();
+      const key = `${fechaStr}|${String(chapa).trim()}|${puestos[i]}|${jornadaStr}`;
 
       if (!existingSet.has(key)) {
         existingSet.add(key);
-        nuevas.push([fecha, chapa, puestos[i], jornada, empresa, buque, parte]);
+        nuevas.push([fecha, chapa, puestos[i], jornada, empresa, buque, parte, 'AUTO']);
       }
     });
   });
@@ -512,7 +513,7 @@ function pivotContrataGlideToJornales() {
   // Escribir nuevas filas
   if (nuevas.length > 0) {
     const startRow = sheetDestino.getLastRow() + 1;
-    sheetDestino.getRange(startRow, 1, nuevas.length, 7).setValues(nuevas);
+    sheetDestino.getRange(startRow, 1, nuevas.length, 8).setValues(nuevas);
     Logger.log(`✅ ${nuevas.length} filas añadidas al histórico`);
   } else {
     Logger.log('ℹ️ No hay filas nuevas');
