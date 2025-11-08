@@ -99,7 +99,7 @@ function addMessage(params) {
     const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
 
     for (let i = data.length - 1; i >= Math.max(1, data.length - 20); i--) {
-      const [rowChapa, rowTime, rowText] = data[i];
+      const [rowTime, rowChapa, rowText] = data[i];
       if (rowChapa === chapa && rowText === texto && new Date(rowTime) >= fiveMinAgo) {
         Logger.log('⚠️ Mensaje duplicado ignorado');
         return jsonResponse(true, { isDuplicate: true }, 'Duplicado ignorado');
