@@ -1288,7 +1288,7 @@ const SheetsAPI = {
       const clavesNecesarias = [
         { clave_jornada: '08-14_SABADO', jornal_base_g1: 145.42, jornal_base_g2: 150.62, prima_minima_coches: 60.31, coef_prima_menor120: 0.374, coef_prima_mayor120: 0.612 },
         { clave_jornada: '14-20_SABADO', jornal_base_g1: 206.37, jornal_base_g2: 210.95, prima_minima_coches: 78.16, coef_prima_menor120: 0.674, coef_prima_mayor120: 0.786 },
-        { clave_jornada: '20-02_SABADO', jornal_base_g1: 299.3, jornal_base_g2: 303.88, prima_minima_coches: 78.16, coef_prima_menor120: 0.974, coef_prima_mayor120: 1.045 }
+        { clave_jornada: '20-02_SABADO', jornal_base_g1: 295.25, jornal_base_g2: 303.88, prima_minima_coches: 78.16, coef_prima_menor120: 0.974, coef_prima_mayor120: 1.045 }
       ];
 
       console.warn('🔧 APLICANDO WORKAROUND DE SÁBADOS...');
