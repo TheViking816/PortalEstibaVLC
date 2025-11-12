@@ -1057,10 +1057,10 @@ async function mostrarChapasDelParte(parteInfo) {
   try {
     console.log('🔍 Buscando chapas para el parte:', parteInfo.parte);
 
-    // Obtener todos los jornales del histórico
-    const jornalesHistorico = await SheetsAPI.getJornalesHistoricoAcumulado(AppState.currentUser);
+    // Obtener TODOS los jornales del histórico (sin filtrar por usuario)
+    const jornalesHistorico = await SheetsAPI.getAllJornalesHistoricoAcumulado();
 
-    // Filtrar chapas del mismo parte
+    // Filtrar chapas del mismo parte, fecha y jornada
     const chapasDelParte = jornalesHistorico.filter(jornal => {
       return jornal.parte === parteInfo.parte &&
              jornal.fecha === parteInfo.fecha &&
