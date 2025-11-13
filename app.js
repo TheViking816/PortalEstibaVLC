@@ -13,7 +13,7 @@ const AppState = {
 // Datos estáticos - Enlaces actualizados con URLs reales
 const ENLACES_DATA = [
   // Formularios
-  { titulo: 'Reportar Jornal Faltante', url: '#', categoria: 'Formularios', color: 'blue', modal: 'report-jornal' },
+  { titulo: 'Reportar Bug', url: '#', categoria: 'Formularios', color: 'blue', modal: 'report-jornal' },
   { titulo: 'Punto y HS', url: 'https://docs.google.com/forms/d/e/1FAIpQLSeGKl5gwKrcj110D_6xhHVo0bn7Fo56tneof68dRyS6xUrD7Q/viewform', categoria: 'Formularios', color: 'blue' },
   { titulo: 'Cambio Posición', url: 'https://docs.google.com/forms/d/e/1FAIpQLSe6V16kccSmyBAYCkDNphYAbD7dqe4ydHbVWu_zpXvnFFFxlA/viewform', categoria: 'Formularios', color: 'blue' },
   { titulo: 'Cambio IRPF', url: 'https://docs.google.com/forms/d/e/1FAIpQLSfDe2o5X_Bge14GA-bSBPRL7zpB2ZW_isBGGVFGAyvGkSAomQ/viewform', categoria: 'Formularios', color: 'blue' },
@@ -142,6 +142,27 @@ const NOTICIAS_DATA = [
 ];
 
 /**
+ * Función auxiliar para formatear fechas
+ * Convierte de ISO (yyyy-mm-dd) o español (dd/mm/yyyy) a español (dd/mm/yyyy)
+ */
+function formatearFecha(fecha) {
+  if (!fecha) return '';
+
+  // Si ya está en formato español (dd/mm/yyyy), devolver tal cual
+  if (fecha.includes('/')) {
+    return fecha;
+  }
+
+  // Si está en formato ISO (yyyy-mm-dd), convertir
+  if (fecha.includes('-')) {
+    const [year, month, day] = fecha.split('-');
+    return `${day}/${month}/${year}`;
+  }
+
+  return fecha;
+}
+
+/**
  * Inicialización de la aplicación
  */
 document.addEventListener('DOMContentLoaded', () => {
@@ -170,6 +191,101 @@ async function initializeApp() {
     showPage('login');
   }
 }
+
+// ============================================================================
+// AUTO-REFRESH PARA PRIMAS E IRPF (Cada 5 minutos)
+// ============================================================================
+
+let autoRefreshInterval = null;
+
+/**
+ * Inicia el auto-refresh de primas e IRPF cada 5 minutos
+ * Se ejecuta automáticamente después del login
+ */
+function startAutoRefresh() {
+  // Limpiar intervalo anterior si existe
+  if (autoRefreshInterval) {
+    clearInterval(autoRefreshInterval);
+  }
+
+  console.log('🔄 Iniciando auto-refresh para primas e IRPF (cada 5 minutos)...');
+
+  // NO ejecutar inmediatamente - esperar 10 segundos para asegurar que Supabase esté inicializado
+  // Ejecutar la primera actualización después de 10 segundos
+  setTimeout(() => {
+    refreshPrimasYConfiguracion();
+  }, 10000);
+
+  // Configurar intervalo de 5 minutos (300000 ms)
+  autoRefreshInterval = setInterval(() => {
+    refreshPrimasYConfiguracion();
+  }, 5 * 60 * 1000);
+}
+
+/**
+ * Detiene el auto-refresh (se llama al hacer logout)
+ */
+function stopAutoRefresh() {
+  if (autoRefreshInterval) {
+    clearInterval(autoRefreshInterval);
+    autoRefreshInterval = null;
+    console.log('🛑 Auto-refresh detenido');
+  }
+}
+
+/**
+ * Refresca los datos de primas e IRPF desde Supabase
+ */
+async function refreshPrimasYConfiguracion() {
+  if (!AppState.currentUser) {
+    console.log('⚠️ No hay usuario autenticado, saltando auto-refresh');
+    return;
+  }
+
+  // Verificar que Supabase esté inicializado
+  if (typeof window.supabase === 'undefined' || !window.supabase) {
+    console.warn('⚠️ Supabase aún no está inicializado, saltando auto-refresh');
+    return;
+  }
+
+  console.log('🔄 Auto-refresh: Actualizando primas e IRPF desde Supabase...');
+
+  try {
+    // 1. Invalidar cache de configuracion_usuario (IRPF)
+    const configCacheKey = `supabase_config_${AppState.currentUser}`;
+    localStorage.removeItem(configCacheKey);
+
+    // 2. Invalidar cache de primas_personalizadas (todas las combinaciones posibles)
+    const allKeys = Object.keys(localStorage);
+    allKeys.forEach(key => {
+      if (key.startsWith(`supabase_primas_${AppState.currentUser}`)) {
+        localStorage.removeItem(key);
+      }
+    });
+
+    // 3. Forzar recarga desde Supabase
+    const [configActualizada, primasActualizadas] = await Promise.all([
+      SheetsAPI.getUserConfig(AppState.currentUser),
+      SheetsAPI.getPrimasPersonalizadas(AppState.currentUser)
+    ]);
+
+    console.log(`✅ Auto-refresh completado:`, {
+      irpf: configActualizada?.irpf || 'sin datos',
+      primas: primasActualizadas?.length || 0
+    });
+
+    // 4. NO recargar Sueldómetro automáticamente para evitar perder cambios del usuario
+    // El usuario puede recargar manualmente si lo necesita
+    if (AppState.currentPage === 'sueldometro') {
+      console.log('ℹ️ Usuario en Sueldómetro - datos actualizados en caché pero NO recargando vista para evitar perder cambios');
+    }
+
+  } catch (error) {
+    console.error('❌ Error en auto-refresh:', error);
+  }
+}
+
+// ============================================================================
 
 /**
  * Configura los event listeners
@@ -335,36 +451,18 @@ async function handleLogin() {
   errorMsg.classList.remove('active');
 
   try {
-    // Obtener usuarios del CSV (necesario para obtener el nombre)
-    const usuarios = await SheetsAPI.getUsuarios();
+    console.log('🔐 Intentando login para chapa:', chapa);
 
-    // Verificar si hay override de contraseña en localStorage
-    const passwordOverrides = JSON.parse(localStorage.getItem('password_overrides') || '{}');
-    const customPassword = passwordOverrides[chapa];
+    // Usar la función segura de Supabase con hashing
+    const resultado = await SheetsAPI.verificarLogin(chapa, password);
 
-    // Buscar usuario para obtener nombre
-    const usuario = usuarios.find(u => u.chapa === chapa);
-
-    if (!usuario) {
-      throw new Error('Chapa no encontrada');
-    }
-
-    // Determinar si la contraseña es válida
-    let passwordValida = false;
-
-    if (customPassword) {
-      // Validar contra contraseña personalizada
-      passwordValida = (password === customPassword);
+    if (resultado.success) {
+      console.log('✅ Login exitoso');
+      // Login exitoso
+      await loginUser(chapa, resultado.user.nombre || `Chapa ${chapa}`);
     } else {
-      // Validar contra contraseña del sheet
-      passwordValida = (usuario.contrasena === password);
-    }
-
-    if (passwordValida) {
-      // Login exitoso - guardar chapa y nombre
-      await loginUser(chapa, usuario.nombre || `Chapa ${chapa}`);
-    } else {
-      throw new Error('Contraseña incorrecta');
+      console.error('❌ Login fallido:', resultado.message);
+      throw new Error(resultado.message || 'Contraseña incorrecta');
     }
 
   } catch (error) {
@@ -410,6 +508,9 @@ async function loginUser(chapa, nombre = null) {
 
   // r UI
   updateUIForAuthenticatedUser();
+
+  // Iniciar auto-refresh de primas e IRPF (cada 5 minutos)
+  startAutoRefresh();
 
   // Navegar al dashboard
   navigateTo('dashboard');
@@ -490,6 +591,9 @@ function updateUIForAuthenticatedUser() {
  * Maneja el logout
  */
 function handleLogout() {
+  // Detener auto-refresh
+  stopAutoRefresh();
+
   AppState.currentUser = null;
   AppState.isAuthenticated = false;
 
@@ -601,77 +705,28 @@ async function handlePasswordChange() {
   try {
     const chapa = AppState.currentUser;
 
-    // Verificar contraseña actual
-    const passwordOverrides = JSON.parse(localStorage.getItem('password_overrides') || '{}');
-    const customPassword = passwordOverrides[chapa];
+    console.log('🔐 Cambiando contraseña para chapa:', chapa);
 
-    console.log('🔐 Verificando contraseña actual...');
-    console.log('Chapa:', chapa);
-    console.log('¿Tiene contraseña personalizada?', !!customPassword);
+    // Llamar a la función segura de Supabase (con hashing)
+    const result = await SheetsAPI.cambiarContrasena(chapa, currentPassword, newPassword);
 
-    let isCurrentPasswordValid = false;
-
-    if (customPassword) {
-      // Si ya tiene una contraseña personalizada, validar contra ella
-      console.log('Validando contra contraseña personalizada');
-      isCurrentPasswordValid = (currentPassword === customPassword);
-      console.log('¿Contraseña válida?', isCurrentPasswordValid);
-    } else {
-      // Si no tiene contraseña personalizada, validar contra el CSV
-      console.log('Validando contra contraseña del CSV');
-      const usuarios = await SheetsAPI.getUsuarios();
-      const usuario = usuarios.find(u => u.chapa === chapa);
-
-      if (usuario) {
-        console.log('Usuario encontrado en CSV');
-        console.log('Contraseña del CSV:', usuario.contrasena);
-        console.log('Contraseña ingresada:', currentPassword);
-        console.log('¿Coinciden?', usuario.contrasena === currentPassword);
-        if (usuario.contrasena === currentPassword) {
-          isCurrentPasswordValid = true;
-        }
-      } else {
-        console.log('Usuario NO encontrado en CSV');
-      }
-    }
-
-    if (!isCurrentPasswordValid) {
-      throw new Error('La contraseña actual es incorrecta');
-    }
-
-    console.log('✅ Contraseña actual verificada correctamente');
-
-    // 1. Guardar nueva contraseña en localStorage (backup local)
-    passwordOverrides[chapa] = newPassword;
-    localStorage.setItem('password_overrides', JSON.stringify(passwordOverrides));
-    console.log('✅ Contraseña guardada en localStorage');
-
-    // 2. Intentar guardar en Google Sheets vía Apps Script (persistente)
-    try {
-      const result = await SheetsAPI.cambiarContrasenaAppsScript(chapa, newPassword);
-      if (result.success) {
-        console.log('✅ Contraseña actualizada en Google Sheets');
-        successMsg.textContent = '¡Contraseña cambiada exitosamente!';
-      } else {
-        console.warn('⚠️ No se pudo actualizar en Google Sheets, pero se guardó localmente');
-        successMsg.textContent = '¡Contraseña cambiada exitosamente!';
-      }
-    } catch (error) {
-      console.error('Error actualizando en Google Sheets:', error);
+    if (result.success) {
+      console.log('✅ Contraseña cambiada exitosamente');
       successMsg.textContent = '¡Contraseña cambiada exitosamente!';
+      successMsg.classList.add('active');
+
+      // Limpiar campos
+      currentPasswordInput.value = '';
+      newPasswordInput.value = '';
+      confirmPasswordInput.value = '';
+
+      // Cerrar modal después de 2 segundos
+      setTimeout(() => {
+        closeChangePasswordModal();
+      }, 2000);
+    } else {
+      throw new Error(result.message || 'Error al cambiar la contraseña');
     }
-
-    successMsg.classList.add('active');
-
-    // Limpiar campos
-    currentPasswordInput.value = '';
-    newPasswordInput.value = '';
-    confirmPasswordInput.value = '';
-
-    // Cerrar modal después de 2 segundos
-    setTimeout(() => {
-      closeChangePasswordModal();
-    }, 2000);
 
   } catch (error) {
     console.error('Error al cambiar contraseña:', error);
@@ -767,14 +822,18 @@ function closeSidebar() {
 }
 
 /**
- * Carga la página de contratación - Mi Contratación
- * LÓGICA SIMPLIFICADA:
- * 1. Lee DIRECTAMENTE de Jornales_Historico_Acumulado (Google Sheets)
- * 2. Filtra jornales para HOY, MAÑANA y PASADO MAÑANA
- * 3. Ordena por fecha ascendente (hoy → mañana → pasado mañana)
- * 4. Dentro del mismo día, ordena por jornada cronológica (02-08, 08-14, 14-20, 20-02)
- * 5. Muestra los jornales durante todo el día hasta medianoche
- * 6. NO usa caché - siempre datos frescos de Sheets
+ * Carga la página de contratación
+ * LÓGICA ROBUSTA:
+ * 1. Lee contrataciones del CSV
+ * 2. Guarda en localStorage con timestamp
+ * 3. Muestra desde localStorage (persistente hasta medianoche)
+ * 4. Jornada 02-08: se muestra hasta medianoche del día siguiente
+ * 5. Otras jornadas: se muestran hasta medianoche del día de contratación
+ */
+/**
+ * Carga la página de contratación
+ * SIMPLIFICADO: Lee directamente desde tabla jornales de Supabase
+ * Muestra jornales del usuario para HOY + 2 días siguientes
  */
 async function loadContratacion() {
   const container = document.getElementById('contratacion-content');
@@ -786,6 +845,18 @@ async function loadContratacion() {
   container.innerHTML = '';
 
   try {
+    // SINCRONIZAR JORNALES DESDE CSV ANTES DE CARGAR
+    console.log('🔄 Sincronizando jornales desde CSV...');
+    try {
+      const syncResult = await SheetsAPI.syncJornalesFromCSV();
+      if (syncResult && syncResult.success) {
+        console.log(`✅ Sincronización completada: ${syncResult.count} nuevos jornales`);
+      }
+    } catch (syncError) {
+      console.error('⚠️ Error sincronizando jornales, continuando con datos existentes:', syncError);
+      // Continuar con datos existentes en caso de error
+    }
+
     const ahora = new Date();
     const hoy = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
     const manana = new Date(hoy);
@@ -804,13 +875,42 @@ async function loadContratacion() {
     const fechaManana = formatFecha(manana);
     const fechaPasadoManana = formatFecha(pasadoManana);
 
-    console.log('=== CONTRATACIONES - LECTURA DIRECTA DE SHEETS ===');
+    console.log('=== CONTRATACIONES (desde tabla jornales) ===');
+    console.log('Chapa:', AppState.currentUser);
     console.log('Fecha hoy:', fechaHoy);
     console.log('Fecha mañana:', fechaManana);
     console.log('Fecha pasado mañana:', fechaPasadoManana);
-    console.log('Hora actual:', ahora.toTimeString().substring(0, 5));
 
-    // Normalizar formato de jornada
+    // LEER TODOS LOS JORNALES DEL USUARIO DESDE SUPABASE
+    console.log('📥 Cargando jornales del usuario desde Supabase...');
+    const todosJornales = await SheetsAPI.getJornalesHistoricoAcumulado(AppState.currentUser);
+    console.log(`✅ ${todosJornales.length} jornales totales del usuario`);
+
+    // FILTRAR SOLO LOS JORNALES DE HOY, MAÑANA Y PASADO MAÑANA
+    const jornalesProximos = todosJornales.filter(jornal => {
+      return jornal.fecha === fechaHoy ||
+             jornal.fecha === fechaManana ||
+             jornal.fecha === fechaPasadoManana;
+    });
+
+    console.log(`📊 ${jornalesProximos.length} jornales para los próximos 3 días`);
+
+    loading.classList.add('hidden');
+
+    if (jornalesProximos.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <h3>No hay asignaciones actuales</h3>
+          <p>No tienes contrataciones asignadas para hoy, mañana o pasado mañana.</p>
+        </div>
+      `;
+      return;
+    }
+
+    // NORMALIZAR FORMATO DE JORNADA
     const normalizeJornada = (jornada) => {
       if (!jornada) return '';
       let norm = jornada.toString().trim().toLowerCase();
@@ -819,34 +919,19 @@ async function loadContratacion() {
       return norm;
     };
 
-    // LEER DIRECTAMENTE DE JORNALES_HISTORICO_ACUMULADO
-    console.log('📥 Leyendo jornales desde Jornales_Historico_Acumulado...');
-    const jornalesHistorico = await SheetsAPI.getJornalesHistoricoAcumulado(AppState.currentUser);
-    console.log(`✅ ${jornalesHistorico.length} jornales obtenidos de Sheets`);
-
-    // Filtrar jornales de HOY, MAÑANA y PASADO MAÑANA
-    const data = jornalesHistorico.filter(jornal => {
-      return jornal.fecha === fechaHoy ||
-             jornal.fecha === fechaManana ||
-             jornal.fecha === fechaPasadoManana;
-    });
-
-    console.log(`📊 ${data.length} jornales filtrados para los próximos 3 días`);
-
-    // ORDENAR por fecha ascendente y jornada cronológica
-    const sortedData = data.sort((a, b) => {
-      // Primero por fecha ascendente (más antiguo primero: hoy, mañana, pasado mañana)
+    // ORDENAR POR FECHA Y JORNADA
+    const sortedData = jornalesProximos.sort((a, b) => {
+      // Primero por fecha (más reciente primero)
       const dateA = new Date(a.fecha.split('/').reverse().join('-'));
       const dateB = new Date(b.fecha.split('/').reverse().join('-'));
-      if (dateA.getTime() !== dateB.getTime()) {
-        return dateA - dateB;
+      if (dateB.getTime() !== dateA.getTime()) {
+        return dateB - dateA;
       }
 
-      // Para el mismo día: ordenar por hora de inicio de jornada (cronológicamente)
+      // Para el mismo día: ordenar por hora de inicio de jornada
       const jornadaNormA = normalizeJornada(a.jornada);
       const jornadaNormB = normalizeJornada(b.jornada);
 
-      // Orden cronológico por hora de inicio: 02-08, 08-14, 14-20, 20-02
       const jornadaOrder = {
         '02-08': 1,
         '08-14': 2,
@@ -857,22 +942,7 @@ async function loadContratacion() {
       return (jornadaOrder[jornadaNormA] || 99) - (jornadaOrder[jornadaNormB] || 99);
     });
 
-    loading.classList.add('hidden');
-
-    if (sortedData.length === 0) {
-      container.innerHTML = `
-        <div class="empty-state">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          <h3>No hay asignaciones actuales</h3>
-          <p>No tienes contrataciones asignadas para hoy.</p>
-        </div>
-      `;
-      return;
-    }
-
-    // Mapeo de empresas a logos
+    // MAPEO DE EMPRESAS A LOGOS
     const empresaLogos = {
       'APM': 'https://i.imgur.com/HgQ95qc.jpeg',
       'CSP': 'https://i.imgur.com/8Tjx3KP.jpeg',
@@ -882,32 +952,35 @@ async function loadContratacion() {
       'ERSHIP': 'https://i.imgur.com/OHDp62K.png'
     };
 
-    // Función para obtener logo de empresa
     const getEmpresaLogo = (empresa) => {
       if (!empresa) return null;
       const empresaUpper = empresa.toString().toUpperCase().trim();
-      const logo = empresaLogos[empresaUpper];
-      console.log(`Logo para ${empresaUpper}:`, logo);
-      return logo || null;
+      return empresaLogos[empresaUpper] || null;
     };
 
-    // AGRUPAR CONTRATACIONES POR FECHA
+    // AGRUPAR POR FECHA
     const contratacionesPorFecha = {};
-    sortedData.forEach(contratacion => {
-      if (!contratacionesPorFecha[contratacion.fecha]) {
-        contratacionesPorFecha[contratacion.fecha] = [];
+    sortedData.forEach(jornal => {
+      if (!contratacionesPorFecha[jornal.fecha]) {
+        contratacionesPorFecha[jornal.fecha] = [];
       }
-      contratacionesPorFecha[contratacion.fecha].push(contratacion);
+      contratacionesPorFecha[jornal.fecha].push(jornal);
     });
 
-    // Obtener fechas únicas ordenadas
+    // OBTENER FECHAS ÚNICAS ORDENADAS
     const fechasUnicas = Object.keys(contratacionesPorFecha);
 
-    // Renderizar cada fecha con sus contrataciones
+    // RENDERIZAR CADA FECHA CON DISEÑO BONITO
     fechasUnicas.forEach((fecha, index) => {
-      const contratacionesFecha = contratacionesPorFecha[fecha];
+      const jornalesDia = contratacionesPorFecha[fecha];
 
-      // Header de fecha
+      // Determinar etiqueta del día
+      let etiquetaDia = '';
+      if (fecha === fechaHoy) etiquetaDia = 'Hoy';
+      else if (fecha === fechaManana) etiquetaDia = 'Mañana';
+      else if (fecha === fechaPasadoManana) etiquetaDia = 'Pasado Mañana';
+
+      // Header de fecha con emoji 📅
       const fechaInfo = document.createElement('div');
       fechaInfo.style.marginBottom = '1.5rem';
       fechaInfo.style.marginTop = index > 0 ? '2.5rem' : '0';
@@ -919,7 +992,7 @@ async function loadContratacion() {
       fechaInfo.style.textAlign = 'center';
       fechaInfo.style.fontSize = '1.1rem';
       fechaInfo.style.fontWeight = 'bold';
-      fechaInfo.innerHTML = `📅 Contratación del ${fecha} (${contratacionesFecha.length} asignación${contratacionesFecha.length > 1 ? 'es' : ''})`;
+      fechaInfo.innerHTML = `📅 ${etiquetaDia} - ${fecha} (${jornalesDia.length} asignación${jornalesDia.length > 1 ? 'es' : ''})`;
       container.appendChild(fechaInfo);
 
       // Grid de tarjetas para esta fecha
@@ -929,8 +1002,8 @@ async function loadContratacion() {
       cardsContainer.style.gap = '1.5rem';
       cardsContainer.style.gridTemplateColumns = 'repeat(auto-fit, minmax(280px, 1fr))';
 
-      contratacionesFecha.forEach(row => {
-        const logo = getEmpresaLogo(row.empresa);
+      jornalesDia.forEach(jornal => {
+        const logo = getEmpresaLogo(jornal.empresa);
 
         const card = document.createElement('div');
         card.className = 'contratacion-card';
@@ -944,17 +1017,17 @@ async function loadContratacion() {
         card.innerHTML = `
           ${logo ? `
             <div style="background: white; padding: 1.5rem; display: flex; align-items: center; justify-content: center; min-height: 140px; border-bottom: 2px solid var(--border-color);">
-              <img src="${logo}" alt="${row.empresa}" style="max-width: 100%; max-height: 150px; object-fit: contain;">
+              <img src="${logo}" alt="${jornal.empresa}" style="max-width: 100%; max-height: 150px; object-fit: contain;">
             </div>
           ` : `
             <div style="background: linear-gradient(135deg, var(--puerto-blue), var(--puerto-dark-blue)); padding: 2rem; text-align: center;">
-              <div style="color: white; font-size: 1.5rem; font-weight: bold;">${row.empresa}</div>
+              <div style="color: white; font-size: 1.5rem; font-weight: bold;">${jornal.empresa || 'Sin Empresa'}</div>
             </div>
           `}
           <div style="padding: 1.5rem;">
             <div style="margin-bottom: 1rem;">
               <div style="color: var(--puerto-blue); font-weight: bold; font-size: 1.25rem; margin-bottom: 0.5rem;">
-                ${row.puesto}
+                ${jornal.puesto || 'Sin puesto'}
               </div>
               <div style="color: var(--text-secondary); font-size: 0.9rem;">Puesto asignado</div>
             </div>
@@ -966,7 +1039,7 @@ async function loadContratacion() {
                 </svg>
                 <div>
                   <div style="font-size: 0.85rem; color: var(--text-secondary);">Jornada</div>
-                  <div style="font-weight: 600;">${row.jornada}</div>
+                  <div style="font-weight: 600;">${jornal.jornada || '--'}</div>
                 </div>
               </div>
 
@@ -976,19 +1049,21 @@ async function loadContratacion() {
                 </svg>
                 <div>
                   <div style="font-size: 0.85rem; color: var(--text-secondary);">Buque</div>
-                  <div style="font-weight: 600;">${row.buque}</div>
+                  <div style="font-weight: 600;">${jornal.buque || '--'}</div>
                 </div>
               </div>
 
-              <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <svg xmlns="http://www.w3.org/2000/svg" style="width: 20px; height: 20px; color: var(--puerto-orange);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
-                <div>
-                  <div style="font-size: 0.85rem; color: var(--text-secondary);">Parte</div>
-                  <div style="font-weight: 600;">${row.parte}</div>
+              ${jornal.parte ? `
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                  <svg xmlns="http://www.w3.org/2000/svg" style="width: 20px; height: 20px; color: var(--puerto-orange);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                  <div>
+                    <div style="font-size: 0.85rem; color: var(--text-secondary);">Parte</div>
+                    <div style="font-weight: 600;">${jornal.parte}</div>
+                  </div>
                 </div>
-              </div>
+              ` : ''}
             </div>
           </div>
         `;
@@ -1005,14 +1080,16 @@ async function loadContratacion() {
 
         // Click para abrir modal con chapas del parte
         card.addEventListener('click', () => {
-          mostrarChapasDelParte({
-            parte: row.parte,
-            empresa: row.empresa,
-            buque: row.buque,
-            fecha: row.fecha,
-            jornada: row.jornada,
-            puesto: row.puesto
-          });
+          if (jornal.parte) {
+            mostrarChapasDelParte({
+              parte: jornal.parte,
+              empresa: jornal.empresa,
+              buque: jornal.buque,
+              fecha: jornal.fecha,
+              jornada: jornal.jornada,
+              puesto: jornal.puesto
+            });
+          }
         });
 
         cardsContainer.appendChild(card);
@@ -1022,6 +1099,7 @@ async function loadContratacion() {
     });
 
   } catch (error) {
+    console.error('❌ Error cargando contrataciones:', error);
     loading.classList.add('hidden');
     container.innerHTML = `
       <div class="empty-state">
@@ -1034,7 +1112,7 @@ async function loadContratacion() {
 
 /**
  * Muestra el modal con todas las chapas contratadas en un parte específico,
- * agrupadas por puesto de contratación
+ * agrupadas por puesto de contratación (usando Supabase)
  */
 async function mostrarChapasDelParte(parteInfo) {
   const modal = document.getElementById('modal-chapas-parte');
@@ -1067,22 +1145,41 @@ async function mostrarChapasDelParte(parteInfo) {
 
   try {
     console.log('🔍 Buscando chapas para el parte:', parteInfo.parte);
+    console.log('📅 Fecha recibida:', parteInfo.fecha);
+    console.log('🕐 Jornada recibida:', parteInfo.jornada);
 
-    // Obtener TODOS los jornales del histórico (sin filtrar por usuario)
-    const jornalesHistorico = await SheetsAPI.getAllJornalesHistoricoAcumulado();
+    // Convertir fecha de formato español (DD/MM/YYYY) a formato ISO (YYYY-MM-DD) para Supabase
+    const convertirFechaAISO = (fechaEsp) => {
+      if (!fechaEsp) return null;
+      if (fechaEsp.includes('-')) return fechaEsp; // Ya está en formato ISO
+      const [dia, mes, año] = fechaEsp.split('/');
+      return `${año}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}`;
+    };
 
-    // Filtrar chapas del mismo parte, fecha y jornada
-    const chapasDelParte = jornalesHistorico.filter(jornal => {
-      return jornal.parte === parteInfo.parte &&
-             jornal.fecha === parteInfo.fecha &&
-             jornal.jornada === parteInfo.jornada;
-    });
+    const fechaISO = convertirFechaAISO(parteInfo.fecha);
+    console.log('📅 Fecha convertida a ISO:', fechaISO);
 
-    console.log(`✅ ${chapasDelParte.length} chapas encontradas en el parte`);
+    // Obtener TODAS las chapas del parte desde Supabase
+    const { data: chapasDelParte, error } = await supabase
+      .from('jornales')
+      .select('*')
+      .eq('parte', parteInfo.parte)
+      .eq('fecha', fechaISO)
+      .eq('jornada', parteInfo.jornada);
+
+    if (error) {
+      console.error('❌ Error de Supabase:', error);
+      throw error;
+    }
+
+    console.log(`✅ ${chapasDelParte ? chapasDelParte.length : 0} chapas encontradas en el parte`);
+    if (chapasDelParte && chapasDelParte.length > 0) {
+      console.log('📋 Primeras 3 chapas:', chapasDelParte.slice(0, 3));
+    }
 
     loading.classList.add('hidden');
 
-    if (chapasDelParte.length === 0) {
+    if (!chapasDelParte || chapasDelParte.length === 0) {
       content.innerHTML = `
         <div class="modal-empty-state">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1246,57 +1343,56 @@ document.addEventListener('DOMContentLoaded', () => {
  * Agrupa jornales por períodos quincenales (1-15, 16-fin de mes)
  * ACTUALIZADO: Usa localStorage con limpieza automática el 31 de diciembre a las 00:00
  */
+let isLoadingJornales = false; // Flag para evitar ejecuciones concurrentes
+
 async function loadJornales() {
+  // Evitar ejecuciones concurrentes
+  if (isLoadingJornales) {
+    console.log('⚠️ loadJornales ya se está ejecutando, saltando llamada duplicada');
+    return;
+  }
+
+  isLoadingJornales = true;
+
   const statsContainer = document.getElementById('jornales-stats');
   const container = document.getElementById('jornales-content');
   const loading = document.getElementById('jornales-loading');
 
-  if (!container) return;
+  if (!container) {
+    isLoadingJornales = false;
+    return;
+  }
 
   loading.classList.remove('hidden');
   container.innerHTML = '';
   statsContainer.innerHTML = '';
 
   try {
+    // Sincronizar jornales desde CSV antes de cargar
+    console.log('🔄 Sincronizando jornales desde CSV...');
+    try {
+      await SheetsAPI.syncJornalesFromCSV();
+    } catch (syncError) {
+      console.warn('⚠️ Error sincronizando jornales desde CSV:', syncError.message);
+    }
+
+    // CARGAR DESDE SUPABASE (todos los jornales agrupados por quincena)
+    console.log('📥 Cargando todos los jornales desde Supabase...');
+    const jornalesSupabase = await SheetsAPI.getJornalesHistoricoAcumulado(AppState.currentUser);
+
     let data = [];
 
-    // 1. CARGAR DESDE JORNALES_HISTORICO_ACUMULADO
-    // (incluye automáticos + manuales, identificados por columna Origen='MANUAL')
-    console.log('📥 Cargando jornales desde Jornales_Historico_Acumulado (incluye manuales)...');
-    try {
-      const jornalesAcumulados = await SheetsAPI.getJornalesHistoricoAcumulado(AppState.currentUser);
+    if (jornalesSupabase && jornalesSupabase.length > 0) {
+      const manuales = jornalesSupabase.filter(j => j.origen === 'manual').length;
+      const csvJornales = jornalesSupabase.filter(j => j.origen === 'csv').length;
+      const otros = jornalesSupabase.length - manuales - csvJornales;
 
-      if (jornalesAcumulados && jornalesAcumulados.length > 0) {
-        const manuales = jornalesAcumulados.filter(j => j.manual).length;
-        const automaticos = jornalesAcumulados.length - manuales;
-        console.log(`✅ ${jornalesAcumulados.length} jornales: ${automaticos} automáticos + ${manuales} manuales`);
+      console.log(`✅ ${jornalesSupabase.length} jornales cargados: ${csvJornales} del CSV + ${manuales} manuales + ${otros} otros`);
+      data = jornalesSupabase;
 
-        data = jornalesAcumulados;
-
-        // Guardar en localStorage como caché
-        const historico = JSON.parse(localStorage.getItem('jornales_historico') || '[]');
-
-        jornalesAcumulados.forEach(jornal => {
-          const existe = historico.some(h =>
-            h.fecha === jornal.fecha &&
-            h.jornada === jornal.jornada &&
-            h.puesto === jornal.puesto &&
-            h.chapa === jornal.chapa
-          );
-          if (!existe) {
-            historico.push(jornal);
-          }
-        });
-
-        localStorage.setItem('jornales_historico', JSON.stringify(historico));
-      } else {
-        throw new Error('No hay jornales en histórico acumulado, usando localStorage');
-      }
-    } catch (error) {
-      console.warn('⚠️ No se pudo cargar desde histórico acumulado:', error.message);
-      console.log('📂 Cargando desde localStorage como fallback...');
-
-      // 2. FALLBACK: CARGAR DESDE LOCALSTORAGE
+    } else {
+      // 3. FALLBACK: CARGAR DESDE LOCALSTORAGE (solo si Supabase falla)
+      console.warn('⚠️ No hay jornales en Supabase, usando localStorage como fallback');
       let historico = JSON.parse(localStorage.getItem('jornales_historico') || '[]');
 
       // LIMPIEZA AUTOMÁTICA: Eliminar jornales del año anterior
@@ -1332,6 +1428,7 @@ async function loadJornales() {
           <p>No se encontraron registros de jornales para tu chapa.</p>
         </div>
       `;
+      isLoadingJornales = false; // Resetear flag antes de return
       return;
     }
 
@@ -1391,6 +1488,9 @@ async function loadJornales() {
         <p>No se pudieron cargar los jornales. Por favor, intenta de nuevo más tarde.</p>
       </div>
     `;
+  } finally {
+    // Siempre resetear el flag, sin importar si hubo éxito o error
+    isLoadingJornales = false;
   }
 }
 
@@ -1401,11 +1501,33 @@ function groupByQuincena(jornales) {
   const map = new Map();
 
   jornales.forEach(jornal => {
-    // Parsear fecha: dd/mm/yyyy
-    const parts = jornal.fecha.split('/');
-    const day = parseInt(parts[0]);
-    const month = parseInt(parts[1]);
-    const year = parseInt(parts[2]);
+    let day, month, year;
+
+    // Parsear fecha: soportar tanto dd/mm/yyyy como yyyy-mm-dd (ISO)
+    if (jornal.fecha.includes('/')) {
+      // Formato español: dd/mm/yyyy
+      const parts = jornal.fecha.split('/');
+      day = parseInt(parts[0]);
+      month = parseInt(parts[1]);
+      year = parseInt(parts[2]);
+    } else if (jornal.fecha.includes('-')) {
+      // Formato ISO: yyyy-mm-dd
+      const parts = jornal.fecha.split('-');
+      year = parseInt(parts[0]);
+      month = parseInt(parts[1]);
+      day = parseInt(parts[2]);
+    } else {
+      // Formato desconocido, intentar como objeto Date
+      const date = new Date(jornal.fecha);
+      if (!isNaN(date.getTime())) {
+        year = date.getFullYear();
+        month = date.getMonth() + 1;
+        day = date.getDate();
+      } else {
+        console.error('Formato de fecha no válido:', jornal.fecha);
+        return; // Saltar este jornal
+      }
+    }
 
     // Determinar quincena: 1 (días 1-15) o 2 (días 16-fin)
     const quincena = day <= 15 ? 1 : 2;
@@ -1557,7 +1679,7 @@ function createQuincenaCard(year, month, quincena, jornales) {
           <tbody>
             ${jornales.map(row => `
               <tr>
-                <td style="white-space: nowrap;"><strong>${row.fecha}</strong></td>
+                <td style="white-space: nowrap;"><strong>${formatearFecha(row.fecha)}</strong></td>
                 <td style="white-space: nowrap;">
                   ${row.puesto}
                   ${row.manual ? '<span class="badge-manual" title="Añadido manualmente">Manual</span>' : ''}
@@ -1904,6 +2026,16 @@ async function loadCenso() {
   container.innerHTML = '';
 
   try {
+    // 1. SINCRONIZAR DESDE CSV AUTOMÁTICAMENTE
+    console.log('🔄 Sincronizando censo desde CSV...');
+    try {
+      await SheetsAPI.syncCensoFromCSV();
+    } catch (syncError) {
+      console.warn('⚠️ Error sincronizando censo desde CSV:', syncError.message);
+      // Continuar de todos modos - usaremos datos existentes en Supabase
+    }
+
+    // 2. CARGAR DESDE SUPABASE
     const data = await SheetsAPI.getCenso();
 
     loading.classList.add('hidden');
@@ -2078,24 +2210,24 @@ async function loadForo() {
     // Actualizar nombres de usuarios en cache
     await actualizarCacheNombres();
 
-    // Intentar cargar desde Google Sheets
-    const sheetMessages = await SheetsAPI.getForoMensajes();
+    // 1. PRIORIDAD: Cargar desde Supabase
+    console.log('📥 Cargando mensajes del foro desde Supabase...');
+    const supabaseMessages = await SheetsAPI.getForoMensajes();
 
-    if (sheetMessages && sheetMessages.length > 0) {
-      // Si hay mensajes en el sheet, usar esos
-      console.log('Usando mensajes del Google Sheet');
-      renderForoMessages(sheetMessages);
-      // Actualizar localStorage con los mensajes del sheet
-      localStorage.setItem('foro_messages', JSON.stringify(sheetMessages));
+    if (supabaseMessages && supabaseMessages.length > 0) {
+      console.log(`✅ ${supabaseMessages.length} mensajes cargados desde Supabase`);
+      renderForoMessages(supabaseMessages);
+      // Actualizar localStorage como backup
+      localStorage.setItem('foro_messages', JSON.stringify(supabaseMessages));
     } else {
-      // Si no hay sheet o está vacío, usar localStorage
-      console.log('Usando mensajes de localStorage');
+      // 2. FALLBACK: usar localStorage si Supabase está vacío
+      console.log('⚠️ No hay mensajes en Supabase, usando localStorage');
       const localMessages = getForoMessagesLocal();
       renderForoMessages(localMessages);
     }
   } catch (error) {
-    console.error('Error cargando foro:', error);
-    // Fallback a localStorage
+    console.error('❌ Error cargando foro desde Supabase:', error);
+    // FALLBACK: localStorage
     const localMessages = getForoMessagesLocal();
     renderForoMessages(localMessages);
   }
@@ -2261,12 +2393,12 @@ async function sendForoMessage() {
     }
   }
 
-  // Enviar a Google Apps Script en segundo plano
+  // Enviar a Supabase en segundo plano
   try {
     const sentToCloud = await SheetsAPI.enviarMensajeForo(AppState.currentUser, texto);
 
     if (sentToCloud) {
-      console.log('✅ Mensaje enviado a Google Sheets');
+      console.log('✅ Mensaje guardado en Supabase');
 
       // Mostrar feedback visual breve de éxito
       sendBtn.innerHTML = `
@@ -2472,11 +2604,34 @@ window.agregarContratacionesManual = function(contrataciones) {
  * Maneja jornadas nocturnas que cruzan medianoche (02-08, 20-02)
  */
 function determinarTipoDia(fecha, jornada) {
-  // Parsear fecha dd/mm/yyyy
-  const parts = fecha.split('/');
-  const day = parseInt(parts[0]);
-  const month = parseInt(parts[1]) - 1; // JavaScript months are 0-indexed
-  const year = parseInt(parts[2]);
+  // Parsear fecha: soportar tanto dd/mm/yyyy como yyyy-mm-dd (ISO)
+  let day, month, year;
+
+  if (fecha.includes('/')) {
+    // Formato español: dd/mm/yyyy
+    const parts = fecha.split('/');
+    day = parseInt(parts[0]);
+    month = parseInt(parts[1]) - 1; // JavaScript months are 0-indexed
+    year = parseInt(parts[2]);
+  } else if (fecha.includes('-')) {
+    // Formato ISO: yyyy-mm-dd
+    const parts = fecha.split('-');
+    year = parseInt(parts[0]);
+    month = parseInt(parts[1]) - 1; // JavaScript months are 0-indexed
+    day = parseInt(parts[2]);
+  } else {
+    // Formato desconocido, intentar como objeto Date
+    const date = new Date(fecha);
+    if (!isNaN(date.getTime())) {
+      year = date.getFullYear();
+      month = date.getMonth();
+      day = date.getDate();
+    } else {
+      console.error('Formato de fecha no válido en determinarTipoDia:', fecha);
+      return 'LABORABLE'; // Default fallback
+    }
+  }
+
   const dateObj = new Date(year, month, day);
 
   // Festivos de España 2025 (ajustar según sea necesario)
@@ -2579,16 +2734,16 @@ async function loadSueldometro() {
     const configUsuario = await SheetsAPI.getUserConfig(AppState.currentUser);
     if (configUsuario && configUsuario.irpf) {
       irpfPorcentaje = configUsuario.irpf;
-      console.log(`✅ IRPF cargado desde Sheets: ${irpfPorcentaje}%`);
+      console.log(`✅ IRPF cargado desde Supabase: ${irpfPorcentaje}%`);
       // Sincronizar con localStorage
       localStorage.setItem(irpfKey, irpfPorcentaje.toString());
     } else {
-      // Si no hay en Sheets, intentar localStorage
+      // Si no hay en Supabase, intentar localStorage
       irpfPorcentaje = parseFloat(localStorage.getItem(irpfKey)) || 15;
       console.log(`📦 IRPF cargado desde localStorage: ${irpfPorcentaje}%`);
     }
   } catch (error) {
-    console.error('❌ Error cargando IRPF desde Sheets, usando localStorage:', error);
+    console.error('❌ Error cargando IRPF desde Supabase, usando localStorage:', error);
     irpfPorcentaje = parseFloat(localStorage.getItem(irpfKey)) || 15;
   }
 
@@ -2612,7 +2767,31 @@ async function loadSueldometro() {
   }
 
   try {
-    // 1. Cargar datos necesarios
+    // 1. LIMPIAR CACHE DE JORNALES, MAPEO, TABLA SALARIAL Y PRIMAS PARA FORZAR RECARGA FRESCA
+    const cacheKeys = Object.keys(localStorage);
+    cacheKeys.forEach(key => {
+      if (key.startsWith(`supabase_jornales_${AppState.currentUser}`) ||
+          key.startsWith(`supabase_primas_${AppState.currentUser}`) ||
+          key === 'supabase_mapeo_puestos' ||
+          key === 'supabase_tabla_salarios') {
+        localStorage.removeItem(key);
+      }
+    });
+    console.log('🗑️ Cache de jornales, primas, mapeo_puestos y tabla_salarios limpiado en Sueldómetro');
+
+    // 1b. SINCRONIZAR PRIMAS PERSONALIZADAS DESDE CSV (si hay URL configurada)
+    const primasURL = 'https://docs.google.com/spreadsheets/d/1j-IaOHXoLEP4bK2hjdn2uAYy8a2chqiQSOw4Nfxoyxc/export?format=csv&gid=1977235036';
+    if (primasURL) {
+      try {
+        console.log('🔄 Sincronizando primas personalizadas desde CSV...');
+        await SheetsAPI.syncPrimasPersonalizadasFromCSV(primasURL);
+      } catch (primasError) {
+        console.warn('⚠️ Error sincronizando primas desde CSV:', primasError.message);
+        // Continuar de todos modos - usaremos datos existentes en Supabase
+      }
+    }
+
+    // 2. Cargar datos necesarios
     console.log('📊 Cargando datos del Sueldómetro...');
 
     const [jornales, mapeoPuestos, tablaSalarial] = await Promise.all([
@@ -2621,9 +2800,10 @@ async function loadSueldometro() {
       SheetsAPI.getTablaSalarial()
     ]);
 
-    const manuales = jornales.filter(j => j.manual).length;
-    const automaticos = jornales.length - manuales;
-    console.log(`✅ ${jornales.length} jornales: ${automaticos} automáticos + ${manuales} manuales`);
+    const manuales = jornales.filter(j => j.origen === 'manual').length;
+    const csvJornales = jornales.filter(j => j.origen === 'csv').length;
+    const otros = jornales.length - manuales - csvJornales;
+    console.log(`✅ ${jornales.length} jornales: ${csvJornales} del CSV + ${manuales} manuales + ${otros} otros`);
     console.log(`   ${mapeoPuestos.length} puestos, ${tablaSalarial.length} salarios`);
 
     if (jornales.length === 0) {
@@ -2690,10 +2870,33 @@ async function loadSueldometro() {
       let grupoSalarial = mapeo.grupo_salarial; // G1 o G2
       let tipoOperativa = mapeo.tipo_operativa; // Contenedor o Coches
 
-      // Forzar valores correctos para Conductor de Coches (asegurar coherencia)
+      // Forzar valores correctos para asegurar coherencia
       if (puestoLower === 'conductor de coches' || puestoLower === 'conductor de 2a') {
         grupoSalarial = 'G2';
         tipoOperativa = 'Coches';
+      }
+
+      // Forzar G1 para Trincador (N/A en movimientos, prima de tabla)
+      if (puestoLower === 'trincador') {
+        grupoSalarial = 'G1';
+        tipoOperativa = 'Trincador';
+      }
+
+      // Forzar G1 para Especialista (120 movimientos por defecto, prima con coeficiente)
+      if (puestoLower === 'especialista') {
+        grupoSalarial = 'G1';
+        tipoOperativa = 'Contenedor'; // Especialista usa Contenedor para mostrar movimientos
+      }
+
+      if (puestoLower === 'trincador de coches') {
+        grupoSalarial = 'G1';
+        tipoOperativa = 'Manual';
+      }
+
+      // Forzar G2 para Conductor de 1a (120 movimientos por defecto, prima con coeficiente)
+      if (puestoLower === 'conductor de 1a') {
+        grupoSalarial = 'G2';
+        tipoOperativa = 'Contenedor';
       }
 
       // Normalizar nombre de puesto para display
@@ -2929,22 +3132,71 @@ async function loadSueldometro() {
       return tarifasRemate[jornada]?.[tipoDia] || null;
     };
 
-    // Cargar valores bloqueados desde Sheets primero, luego localStorage como fallback
+    // Cargar valores bloqueados desde Supabase primero, luego localStorage como fallback
     const lockedValuesKey = `locked_values_${AppState.currentUser}`;
     let lockedValues = {};
 
-    // 1. Intentar cargar desde Sheets
+    // 1. Intentar cargar desde Supabase
     try {
-      console.log('📥 Cargando primas personalizadas desde Sheets...');
+      console.log('📥 Cargando primas personalizadas desde Supabase...');
       const primasSheets = await SheetsAPI.getPrimasPersonalizadas(AppState.currentUser);
 
       if (primasSheets && primasSheets.length > 0) {
-        // Poblar lockedValues con datos de Sheets
+        // Poblar lockedValues con datos de Supabase
         primasSheets.forEach(p => {
-          const key = `${p.fecha}_${p.jornada.replace(/\s+a\s+/g, '-').replace(/\s+/g, '')}`;
+          // IMPORTANTE: p.fecha ya viene en formato español (dd/mm/yyyy) porque
+          // getJornales() hace la conversión automática de ISO → Español
+          // Pero getPrimasPersonalizadas NO hace esta conversión
+          // Así que necesitamos convertir aquí si viene en formato ISO
+          let fechaEspañol = p.fecha;
+          if (p.fecha.includes('-')) {
+            // Convertir de ISO (yyyy-mm-dd) a español (dd/mm/yyyy)
+            const [year, month, day] = p.fecha.split('-');
+            fechaEspañol = `${day}/${month}/${year}`;
+          }
+
+          // Normalizar jornada (eliminar espacios y convertir "a" a "-")
+          const jornadaNormalizada = p.jornada.replace(/\s+a\s+/g, '-').replace(/\s+/g, '');
+
+          const key = `${fechaEspañol}_${jornadaNormalizada}`;
+
+          let primaFinal = p.prima_personalizada || p.prima || 0;
+          let movimientosFinal = p.movimientos_personalizados || p.movimientos || 0;
+
+          // CÁLCULO INVERSO: Si hay prima pero NO movimientos, calcular movimientos desde prima
+          // Solo para operativas de Contenedor (Especialista, Conductor de 1a)
+          if (primaFinal > 0 && movimientosFinal === 0) {
+            // Buscar el jornal correspondiente para obtener tipo_operativa
+            const jornalCorrespondiente = jornalesConSalario.find(j =>
+              j.fecha === fechaEspañol &&
+              j.jornada.replace(/\s+a\s+/g, '-').replace(/\s+/g, '') === jornadaNormalizada
+            );
+
+            if (jornalCorrespondiente && jornalCorrespondiente.tipo_operativa === 'Contenedor') {
+              // Obtener coeficientes de la tabla salarial
+              const salarioInfo = tablaSalarial.find(s => s.clave_jornada === jornalCorrespondiente.clave_jornada);
+
+              if (salarioInfo) {
+                // Calcular movimientos inversos: prima / coeficiente
+                // Intentar primero con coef_mayor120 (más común)
+                let movimientosCalculados = Math.round(primaFinal / salarioInfo.coef_prima_mayor120);
+
+                // Si los movimientos son < 120, recalcular con coef_menor120
+                if (movimientosCalculados < 120) {
+                  movimientosCalculados = Math.round(primaFinal / salarioInfo.coef_prima_menor120);
+                }
+
+                movimientosFinal = movimientosCalculados;
+                console.log(`🔄 Movimientos calculados inversos: ${primaFinal}€ / coef = ${movimientosCalculados} mov`);
+              }
+            }
+          }
+
+          console.log(`🔑 DEBUG: Creando clave prima: "${key}" con prima=${primaFinal || 0}, movimientos=${movimientosFinal || 0}`);
+
           lockedValues[key] = {
-            prima: p.prima || 0,
-            movimientos: p.movimientos || 0,
+            prima: primaFinal,
+            movimientos: movimientosFinal,
             horasRelevo: p.relevo || 0,
             horasRemate: p.remate || 0,
             primaLocked: true,
@@ -2952,16 +3204,17 @@ async function loadSueldometro() {
           };
         });
 
-        console.log(`✅ ${primasSheets.length} primas personalizadas cargadas desde Sheets`);
+        console.log(`✅ ${primasSheets.length} primas personalizadas cargadas desde Supabase`);
+        console.log(`🔑 Claves generadas:`, Object.keys(lockedValues));
 
         // Guardar en localStorage como caché
         localStorage.setItem(lockedValuesKey, JSON.stringify(lockedValues));
       }
     } catch (error) {
-      console.warn('⚠️ Error cargando primas desde Sheets, usando localStorage:', error);
+      console.warn('⚠️ Error cargando primas desde Supabase, usando localStorage:', error);
     }
 
-    // 2. Si no hay datos de Sheets, cargar desde localStorage
+    // 2. Si no hay datos de Supabase, cargar desde localStorage
     if (Object.keys(lockedValues).length === 0) {
       try {
         const stored = localStorage.getItem(lockedValuesKey);
@@ -2980,9 +3233,9 @@ async function loadSueldometro() {
       // Guardar en localStorage (caché local)
       localStorage.setItem(lockedValuesKey, JSON.stringify(lockedValues));
 
-      // Si se proporciona fecha y jornada, guardar también en Sheets
+      // Si se proporciona fecha y jornada, guardar también en Supabase
       if (fecha && jornada) {
-        // Debounce: esperar 1 segundo antes de guardar en Sheets
+        // Debounce: esperar 1 segundo antes de guardar en Supabase
         if (saveTimeout) clearTimeout(saveTimeout);
 
         saveTimeout = setTimeout(() => {
@@ -2998,12 +3251,14 @@ async function loadSueldometro() {
               datos.movimientos || 0,
               datos.horasRelevo || 0,
               datos.horasRemate || 0
-            ).then(success => {
-              if (success) {
-                console.log(`✅ Datos sincronizados con Sheets: ${fecha} ${jornada}`);
+            ).then(result => {
+              if (result && result.success) {
+                console.log(`✅ Prima guardada en Supabase: ${fecha} ${jornada}`, result.data);
+              } else {
+                console.warn(`⚠️ Error guardando prima en Supabase: ${result?.message || 'desconocido'}`);
               }
             }).catch(err => {
-              console.error('Error sincronizando con Sheets:', err);
+              console.error('❌ Error sincronizando con Supabase:', err);
             });
           }
         }, 1000); // 1 segundo de debounce
@@ -3093,17 +3348,50 @@ async function loadSueldometro() {
                 // NUEVA CLAVE: Usar fecha_jornada para identificación única
                 const lockKey = `${j.fecha}_${j.jornada.replace(/\s+a\s+/g, '-').replace(/\s+/g, '')}`;
 
+                // DEBUG: Log para ver qué clave se está buscando
+                if (idx === 0) {
+                  console.log(`🔑 DEBUG lockKey generada: "${lockKey}"`);
+                  console.log(`🔑 Fecha del jornal: "${j.fecha}", Jornada: "${j.jornada}"`);
+                  console.log(`🗂️ lockedValues disponibles:`, Object.keys(lockedValues));
+                  console.log(`🔍 ¿Existe en lockedValues?`, lockKey in lockedValues);
+                  if (lockKey in lockedValues) {
+                    console.log(`✅ Datos encontrados:`, lockedValues[lockKey]);
+                  }
+                }
+
                 // Cargar valores bloqueados o usar defaults
                 const lockedData = lockedValues[lockKey] || {};
                 const movimientosValue = lockedData.movimientos !== undefined ? lockedData.movimientos : 120;
-                const primaValue = lockedData.prima !== undefined ? lockedData.prima : j.prima;
+                let primaValue = lockedData.prima !== undefined ? lockedData.prima : j.prima;
                 const horasRelevoValue = lockedData.horasRelevo !== undefined ? lockedData.horasRelevo : 0;
                 const horasRemateValue = lockedData.horasRemate !== undefined ? lockedData.horasRemate : 0;
                 const movimientosLocked = lockedData.movimientosLocked || false;
                 const primaLocked = lockedData.primaLocked || false;
 
-                // Si hay valores bloqueados, recalcular el bruto con esos valores
-                let primaRecalculada = primaLocked ? primaValue : j.prima;
+                // RECALCULAR PRIMA según movimientos si no está bloqueada y es Contenedor
+                if (!primaLocked && j.tipo_operativa === 'Contenedor' && !j.es_jornal_fijo) {
+                  const salarioInfo = tablaSalarial.find(s => s.clave_jornada === j.clave_jornada);
+                  if (salarioInfo) {
+                    // Usar coeficiente correcto según movimientos
+                    if (movimientosValue < 120) {
+                      primaValue = movimientosValue * salarioInfo.coef_prima_menor120;
+                    } else {
+                      primaValue = movimientosValue * salarioInfo.coef_prima_mayor120;
+                    }
+                  }
+                }
+
+                // DEBUG: Log de valores usados
+                if (idx === 0) {
+                  console.log(`💰 Prima usada: ${primaValue.toFixed(2)}, Prima locked: ${primaLocked}`);
+                  console.log(`📊 Movimientos usados: ${movimientosValue}, Movimientos locked: ${movimientosLocked}`);
+                  if (!primaLocked && j.tipo_operativa === 'Contenedor') {
+                    console.log(`🔢 Prima recalculada con ${movimientosValue} movimientos`);
+                  }
+                }
+
+                // Si hay valores bloqueados, usar prima bloqueada; si no, usar la recalculada
+                let primaRecalculada = primaLocked ? primaValue : primaValue;
 
                 const esOC = j.es_jornal_fijo;
 
@@ -3120,7 +3408,7 @@ async function loadSueldometro() {
 
                 return `
                 <tr id="${rowId}" data-row-index="${idx}" data-lock-key="${lockKey}" data-fecha="${j.fecha}" data-jornada="${j.jornada.replace(/\s+a\s+/g, '-').replace(/\s+/g, '')}">
-                  <td>${j.fecha}</td>
+                  <td>${formatearFecha(j.fecha)}</td>
                   <td><span class="badge badge-${j.jornada.replace(/\s+/g, '')}">${j.jornada}</span></td>
                   <td>${j.puesto_display}</td>
                   <td class="base-value">${j.salario_base.toFixed(2)}€${j.incluye_complemento ? '*' : ''}</td>
@@ -3263,6 +3551,7 @@ async function loadSueldometro() {
           // Guardar movimientos en localStorage y Sheets
           if (!lockedValues[lockKey]) lockedValues[lockKey] = {};
           lockedValues[lockKey].movimientos = movimientos;
+          lockedValues[lockKey].movimientosLocked = true; // Marcar como bloqueado para que se use
           saveLockedValues(fecha, jornada);
 
           // Recalcular prima según movimientos (solo si no está bloqueada)
@@ -3330,6 +3619,7 @@ async function loadSueldometro() {
           // Guardar prima en localStorage y Sheets
           if (!lockedValues[lockKey]) lockedValues[lockKey] = {};
           lockedValues[lockKey].prima = nuevaPrima;
+          lockedValues[lockKey].primaLocked = true; // Marcar como bloqueada para que se use
           saveLockedValues(fecha, jornada);
 
           // NUEVO: Recalcular movimientos basado en la prima (si es operativa de contenedor)
@@ -3607,10 +3897,12 @@ async function loadSueldometro() {
         return;
       }
 
-      // Guardar en Google Sheets
-      const guardadoEnSheets = await SheetsAPI.saveUserConfig(AppState.currentUser, nuevoIRPF);
-      if (guardadoEnSheets) {
-        console.log('✅ IRPF guardado en Sheets correctamente');
+      // Guardar en Supabase
+      const resultadoGuardado = await SheetsAPI.saveUserConfig(AppState.currentUser, nuevoIRPF);
+      if (resultadoGuardado && resultadoGuardado.success) {
+        console.log('✅ IRPF guardado en Supabase correctamente:', resultadoGuardado.data);
+      } else {
+        console.warn('⚠️ Error guardando IRPF en Supabase:', resultadoGuardado?.message || 'desconocido');
       }
 
       // Guardar en localStorage
@@ -3851,7 +4143,7 @@ function initAddJornalManual() {
       // Guardar en localStorage
       localStorage.setItem('jornales_historico', JSON.stringify(historico));
 
-      // Guardar también en Google Sheets para persistencia permanente
+      // Guardar también en Supabase para persistencia permanente
       SheetsAPI.saveJornalManual(
         AppState.currentUser,
         nuevoJornal.fecha,
@@ -3863,10 +4155,19 @@ function initAddJornalManual() {
         nuevoJornal.parte
       ).then(success => {
         if (success) {
-          console.log('✅ Jornal también guardado en Google Sheets');
+          console.log('✅ Jornal también guardado en Supabase');
+
+          // FORZAR limpieza del cache de jornales para este usuario
+          const cacheKeys = Object.keys(localStorage);
+          cacheKeys.forEach(key => {
+            if (key.startsWith(`supabase_jornales_${AppState.currentUser}`)) {
+              localStorage.removeItem(key);
+              console.log(`🗑️ Cache limpiado: ${key}`);
+            }
+          });
         }
       }).catch(err => {
-        console.error('❌ Error guardando en Sheets (continuando):', err);
+        console.error('❌ Error guardando en Supabase (continuando):', err);
       });
 
       console.log('✅ Jornal guardado correctamente en localStorage');
@@ -3899,7 +4200,7 @@ function initAddJornalManual() {
 }
 
 /**
- * Inicializa el modal para reportar jornales faltantes
+ * Inicializa el modal para reportar bugs
  */
 function initReportJornal() {
   const modal = document.getElementById('report-jornal-modal');
@@ -3908,14 +4209,8 @@ function initReportJornal() {
   const sendBtn = document.getElementById('send-report');
 
   const chapaInput = document.getElementById('report-chapa');
-  const fechaInput = document.getElementById('report-fecha');
-  const puestoSelect = document.getElementById('report-puesto');
-  const puestoOtroGroup = document.getElementById('report-puesto-otro-group');
-  const puestoOtroInput = document.getElementById('report-puesto-otro');
-  const jornadaSelect = document.getElementById('report-jornada');
-  const empresaInput = document.getElementById('report-empresa');
-  const buqueInput = document.getElementById('report-buque');
-  const parteInput = document.getElementById('report-parte');
+  const tipoSelect = document.getElementById('report-tipo');
+  const descripcionInput = document.getElementById('report-descripcion');
 
   const errorMsg = document.getElementById('report-error');
   const successMsg = document.getElementById('report-success');
@@ -3929,30 +4224,12 @@ function initReportJornal() {
     }
   };
 
-  // Mostrar campo "otro" si se selecciona
-  puestoSelect.addEventListener('change', () => {
-    if (puestoSelect.value === 'otro') {
-      puestoOtroGroup.style.display = 'block';
-      puestoOtroInput.required = true;
-    } else {
-      puestoOtroGroup.style.display = 'none';
-      puestoOtroInput.required = false;
-      puestoOtroInput.value = '';
-    }
-  });
-
   // Cerrar modal
   const cerrarModal = () => {
     modal.style.display = 'none';
     // Limpiar formulario
-    fechaInput.value = '';
-    puestoSelect.value = '';
-    puestoOtroGroup.style.display = 'none';
-    puestoOtroInput.value = '';
-    jornadaSelect.value = '';
-    empresaInput.value = '';
-    buqueInput.value = '';
-    parteInput.value = '1';
+    tipoSelect.value = '';
+    descripcionInput.value = '';
     errorMsg.style.display = 'none';
     successMsg.style.display = 'none';
   };
@@ -3986,39 +4263,27 @@ function initReportJornal() {
     successMsg.style.display = 'none';
 
     // Validar campos requeridos
-    if (!fechaInput.value || !chapaInput.value || !puestoSelect.value ||
-        !jornadaSelect.value || !empresaInput.value || !parteInput.value) {
+    if (!chapaInput.value || !tipoSelect.value || !descripcionInput.value.trim()) {
       errorMsg.textContent = 'Por favor, completa todos los campos obligatorios (*)';
       errorMsg.style.display = 'block';
       return;
     }
 
-    // Determinar puesto final
-    let puestoFinal = puestoSelect.value;
-    if (puestoSelect.value === 'otro') {
-      if (!puestoOtroInput.value.trim()) {
-        errorMsg.textContent = 'Por favor, especifica el puesto';
-        errorMsg.style.display = 'block';
-        return;
-      }
-      puestoFinal = puestoOtroInput.value.trim();
-    }
+    // Crear cuerpo del email
+    const emailSubject = `🐛 Bug Report - ${tipoSelect.value} - Chapa ${chapaInput.value}`;
+    const emailBody = `Reporte de Bug/Problema
 
-    // Formatear fecha a DD/MM/YYYY
-    const [year, month, day] = fechaInput.value.split('-');
-    const fechaFormateada = `${day}/${month}/${year}`;
+📋 Información del Reporte:
+--------------------------
+Chapa: ${chapaInput.value}
+Tipo: ${tipoSelect.value}
+Fecha: ${new Date().toLocaleDateString('es-ES')}
 
-    // Crear cuerpo del email en formato tabular (separado por tabulaciones)
-    const emailSubject = `Jornal Faltante - Chapa ${chapaInput.value}`;
-    const emailBody = `Jornal Faltante Reportado:
+📝 Descripción del Problema:
+--------------------------
+${descripcionInput.value}
 
-Fecha\tChapa\tPuesto_Contratacion\tJornada\tEmpresa\tBuque\tParte
-${fechaFormateada}\t${chapaInput.value}\t${puestoFinal}\t${jornadaSelect.value}\t${empresaInput.value}\t${buqueInput.value.trim() || '--'}\t${parteInput.value}
-
----
-Para copiar a la hoja de cálculo:
-${fechaFormateada}\t${chapaInput.value}\t${puestoFinal}\t${jornadaSelect.value}\t${empresaInput.value}\t${buqueInput.value.trim() || '--'}\t${parteInput.value}
-
+--------------------------
 Enviado desde Portal Estiba VLC`;
 
     try {
@@ -4088,11 +4353,53 @@ function initForoEnhanced() {
   });
 }
 
+/**
+ * Inicializar botón de sincronización de jornales
+ */
+function initSyncJornalesButton() {
+  const syncBtn = document.getElementById('sync-jornales-btn');
+
+  if (syncBtn) {
+    syncBtn.addEventListener('click', async () => {
+      // Evitar clicks múltiples
+      if (syncBtn.classList.contains('syncing')) {
+        return;
+      }
+
+      syncBtn.classList.add('syncing');
+
+      try {
+        console.log('🔄 Sincronización manual iniciada...');
+        const result = await SheetsAPI.syncJornalesFromCSV();
+
+        if (result && result.success) {
+          console.log(`✅ Sincronización completada: ${result.count} jornales nuevos`);
+
+          // Recargar la vista de jornales
+          await loadJornales();
+
+          // Mostrar notificación
+          alert(`✅ Sincronización completada\n\n${result.count} jornales nuevos agregados\n${result.duplicados || 0} duplicados omitidos`);
+        } else {
+          console.warn('⚠️ Sincronización sin nuevos jornales');
+          alert('ℹ️ No hay jornales nuevos para sincronizar');
+        }
+      } catch (error) {
+        console.error('❌ Error en sincronización manual:', error);
+        alert('❌ Error al sincronizar jornales desde CSV. Revisa la consola para más detalles.');
+      } finally {
+        syncBtn.classList.remove('syncing');
+      }
+    });
+  }
+}
+
 // Inicializar al cargar el DOM
 document.addEventListener('DOMContentLoaded', () => {
   initAddJornalManual();
   initReportJornal();
   initForoEnhanced();
+  initSyncJornalesButton();
 });
 
 

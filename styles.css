@@ -1830,22 +1830,72 @@ body::before {
   transform: scale(0);
 }
 
+/* Botón de sincronización */
+.fab-sync-jornal {
+  position: fixed;
+  bottom: 7.5rem;
+  right: 2rem;
+  width: 56px;
+  height: 56px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3), 0 2px 4px rgba(16, 185, 129, 0.2);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 900;
+  opacity: 0;
+  visibility: hidden;
+  transform: scale(0);
+}
+
 /* Mostrar FAB solo en página de jornales */
-#page-jornales.active .fab-add-jornal {
+#page-jornales.active .fab-add-jornal,
+#page-jornales.active .fab-sync-jornal {
   opacity: 1;
   visibility: visible;
   transform: scale(1);
 }
 
-.fab-add-jornal svg {
+.fab-add-jornal svg,
+.fab-sync-jornal svg {
   width: 28px;
   height: 28px;
   stroke-width: 2.5;
 }
 
+.fab-sync-jornal svg {
+  width: 24px;
+  height: 24px;
+}
+
 .fab-add-jornal:hover {
   transform: scale(1.1) rotate(90deg);
   box-shadow: 0 6px 20px rgba(10, 46, 92, 0.4), 0 3px 8px rgba(10, 46, 92, 0.3);
+}
+
+.fab-sync-jornal:hover {
+  transform: scale(1.1) rotate(180deg);
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4), 0 3px 8px rgba(16, 185, 129, 0.3);
+}
+
+.fab-sync-jornal:active {
+  transform: scale(0.95);
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+}
+
+.fab-sync-jornal.syncing {
+  animation: spin 1s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .fab-add-jornal:active {
