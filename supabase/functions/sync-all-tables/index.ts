@@ -11,6 +11,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const URLS = {
   // CSV públicos de la empresa
   jornales: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSTtbkA94xqjf81lsR7bLKKtyES2YBDKs8J2T4UrSEan7e5Z_eaptShCA78R1wqUyYyASJxmHj3gDnY/pub?gid=1388412839&single=true&output=csv',
+  censo: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTrMuapybwZUEGPR1vsP9p1_nlWvznyl0sPD4xWsNJ7HdXCj1ABY1EpU1um538HHZQyJtoAe5Niwrxq/pub?gid=841547354&single=true&output=csv',
 
   // Google Sheets privados (temporalmente hasta migración completa)
   irpf: 'https://docs.google.com/spreadsheets/d/1j-IaOHXoLEP4bK2hjdn2uAYy8a2chqiQSOw4Nfxoyxc/export?format=csv&gid=988244680',
@@ -693,6 +694,161 @@ async function sincronizarForo(supabase: any): Promise<SyncResult> {
   }
 }
 
+// 5. SINCRONIZAR CENSO desde CSV (formato: posicion,chapa,color)
+async function sincronizarCenso(supabase: any): Promise<SyncResult> {
+  try {
+    console.log('📥 Sincronizando censo desde CSV...')
+    console.log('📍 URL:', URLS.censo)
+
+    const csvText = await fetchConReintentos(URLS.censo)
+    console.log(`✅ CSV descargado: ${csvText.length} caracteres`)
+
+    const { headers, rows } = parseCSV(csvText)
+    console.log(`📊 Headers del censo: ${headers.join(', ')}`)
+    console.log(`📋 Filas del censo: ${rows.length}`)
+
+    if (rows.length === 0) {
+      return { tabla: 'censo', exito: false, insertados: 0, duplicados: 0, errores: 0, mensaje: 'CSV vacío' }
+    }
+
+    // Mapeo de colores: 4=verde, 3=azul, 2=amarillo, 1=naranja, 0=rojo
+    const colorMap: Record<string, string> = {
+      '4': 'green',
+      '3': 'blue',
+      '2': 'yellow',
+      '1': 'orange',
+      '0': 'red'
+    }
+
+    // El CSV tiene formato: posicion,chapa,color
+    // donde color es un número: 4=verde, 3=azul, 2=amarillo, 1=naranja, 0=rojo
+    const censoData = []
+    let filasIgnoradas = 0
+
+    for (const values of rows) {
+      if (values.length < 3) {
+        filasIgnoradas++
+        continue
+      }
+
+      const posicion = values[0]?.trim()
+      const chapa = values[1]?.trim()
+      const colorNum = values[2]?.trim()
+
+      // Validar que posición y chapa sean números
+      const posicionNum = parseInt(posicion)
+      const chapaNum = parseInt(chapa)
+
+      if (!posicion || isNaN(posicionNum) || posicionNum <= 0) {
+        filasIgnoradas++
+        continue
+      }
+
+      if (!chapa || isNaN(chapaNum) || chapaNum <= 0) {
+        filasIgnoradas++
+        continue
+      }
+
+      // Convertir color numérico a nombre
+      const colorNombre = colorMap[colorNum] || 'unknown'
+
+      // Estado descriptivo basado en el color
+      let estado = ''
+      switch (colorNombre) {
+        case 'green':
+          estado = 'Disponible'
+          break
+        case 'blue':
+          estado = 'En trabajo'
+          break
+        case 'yellow':
+          estado = 'Alerta'
+          break
+        case 'orange':
+          estado = 'Precaución'
+          break
+        case 'red':
+          estado = 'No disponible'
+          break
+        default:
+          estado = 'Desconocido'
+      }
+
+      censoData.push({
+        fecha: new Date().toISOString().split('T')[0], // Fecha actual (YYYY-MM-DD)
+        posicion: posicionNum,
+        chapa: chapa,
+        color: colorNombre,
+        estado: estado
+      })
+    }
+
+    console.log(`✅ ${censoData.length} registros de censo procesados`)
+    console.log(`⚠️ ${filasIgnoradas} filas ignoradas (datos inválidos)`)
+
+    if (censoData.length > 0) {
+      console.log(`📦 Ejemplo de censo:`, JSON.stringify(censoData[0], null, 2))
+    }
+
+    // Insertar usando upsert por (fecha, posicion)
+    let insertados = 0
+    let errores = 0
+
+    // Insertar en lotes de 100
+    const BATCH_SIZE = 100
+    for (let i = 0; i < censoData.length; i += BATCH_SIZE) {
+      const batch = censoData.slice(i, i + BATCH_SIZE)
+
+      try {
+        const { data, error } = await supabase
+          .from('censo')
+          .upsert(batch, {
+            onConflict: 'fecha,posicion',
+            ignoreDuplicates: false  // Actualiza si existe
+          })
+          .select()
+
+        if (error) {
+          console.error(`❌ Error en lote ${i}-${i + batch.length}:`, {
+            error: error.message,
+            code: error.code
+          })
+          errores += batch.length
+        } else {
+          insertados += data?.length || batch.length
+        }
+      } catch (error) {
+        console.error(`❌ Excepción en lote ${i}-${i + batch.length}:`, error)
+        errores += batch.length
+      }
+    }
+
+    console.log(`✅ Censo: ${insertados} procesados (nuevos o actualizados), ${errores} errores`)
+
+    return {
+      tabla: 'censo',
+      exito: true,
+      insertados,
+      duplicados: 0,
+      errores
+    }
+  } catch (error) {
+    console.error('❌ Error sincronizando censo:', {
+      message: error.message,
+      stack: error.stack,
+      url: URLS.censo
+    })
+    return {
+      tabla: 'censo',
+      exito: false,
+      insertados: 0,
+      duplicados: 0,
+      errores: 1,
+      mensaje: `Error: ${error.message}`
+    }
+  }
+}
+
 // Handler principal
 serve(async (req) => {
   try {
@@ -718,6 +874,7 @@ serve(async (req) => {
     // Ejecutar todas las sincronizaciones en paralelo
     const resultados = await Promise.all([
       sincronizarJornales(supabase),
+      sincronizarCenso(supabase),
       sincronizarIRPF(supabase),
       sincronizarPrimas(supabase),
       sincronizarForo(supabase)
