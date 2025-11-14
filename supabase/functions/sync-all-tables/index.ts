@@ -712,15 +712,6 @@ async function sincronizarCenso(supabase: any): Promise<SyncResult> {
       return { tabla: 'censo', exito: false, insertados: 0, duplicados: 0, errores: 0, mensaje: 'CSV incompleto (menos de 55 filas)' }
     }
 
-    // Mapeo de colores: 4=verde, 3=azul, 2=amarillo, 1=naranja, 0=rojo
-    const colorMap: Record<string, string> = {
-      '4': 'green',
-      '3': 'blue',
-      '2': 'yellow',
-      '1': 'orange',
-      '0': 'red'
-    }
-
     // Extraer filas 6-55 (índices 5-54 en array 0-indexed)
     const filasRelevantes = rows.slice(5, 55) // Filas 6 a 55
     console.log(`📋 Procesando filas 6-55: ${filasRelevantes.length} filas`)
@@ -742,7 +733,7 @@ async function sincronizarCenso(supabase: any): Promise<SyncResult> {
     ]
 
     // Aplanar datos: recorrer cada grupo y cada fila
-    const censoFlat: Array<{posicion: number, chapa: string, color: string}> = []
+    const censoFlat: Array<{posicion: number, chapa: string, color: number}> = []
     let posicionSecuencial = 1
 
     for (const [colPos, colChapa, colColor] of grupos) {
@@ -766,13 +757,17 @@ async function sincronizarCenso(supabase: any): Promise<SyncResult> {
           continue
         }
 
-        // Convertir color numérico a nombre
-        const colorNombre = colorMap[colorVal] || 'green'
+        // Validar y convertir color a número (0-4)
+        // El CSV contiene: 0=rojo, 1=naranja, 2=amarillo, 3=azul, 4=verde
+        const colorNum = parseInt(colorVal)
+        if (isNaN(colorNum) || colorNum < 0 || colorNum > 4) {
+          continue // Ignorar colores inválidos
+        }
 
         censoFlat.push({
           posicion: posicionSecuencial++,
           chapa: chapaVal,
-          color: colorNombre
+          color: colorNum  // Guardar como número (0-4)
         })
       }
     }
