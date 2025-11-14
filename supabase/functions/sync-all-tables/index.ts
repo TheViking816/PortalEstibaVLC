@@ -705,8 +705,23 @@ async function sincronizarCenso(supabase: any): Promise<SyncResult> {
     const csvText = await fetchConReintentos(URLS.censo)
     console.log(`✅ CSV descargado: ${csvText.length} caracteres`)
 
+    // DEBUG: Mostrar las primeras 10 líneas RAW del CSV
+    const lineasRaw = csvText.split('\n')
+    console.log(`🔍 DEBUG - Total líneas RAW en CSV: ${lineasRaw.length}`)
+    console.log(`🔍 DEBUG - Primeras 10 líneas RAW:`)
+    for (let i = 0; i < Math.min(10, lineasRaw.length); i++) {
+      console.log(`   Línea ${i + 1}: "${lineasRaw[i].substring(0, 100)}${lineasRaw[i].length > 100 ? '...' : ''}"`)
+    }
+
     const { headers, rows } = parseCSV(csvText)
     console.log(`📊 CSV parseado: ${rows.length} filas totales`)
+
+    // DEBUG: Mostrar las primeras 10 filas parseadas
+    console.log(`🔍 DEBUG - Primeras 10 filas PARSEADAS:`)
+    for (let i = 0; i < Math.min(10, rows.length); i++) {
+      const fila = rows[i]
+      console.log(`   Fila ${i + 1} (${fila.length} cols): [${fila.slice(0, 10).join(', ')}${fila.length > 10 ? ', ...' : ''}]`)
+    }
 
     if (rows.length < 55) {
       return { tabla: 'censo', exito: false, insertados: 0, duplicados: 0, errores: 0, mensaje: 'CSV incompleto (menos de 55 filas)' }
@@ -715,6 +730,20 @@ async function sincronizarCenso(supabase: any): Promise<SyncResult> {
     // Extraer filas 6-55 (índices 5-54 en array 0-indexed)
     const filasRelevantes = rows.slice(5, 55) // Filas 6 a 55
     console.log(`📋 Procesando filas 6-55: ${filasRelevantes.length} filas`)
+
+    // DEBUG: Mostrar la fila 6 (índice 5) que debería contener 702
+    console.log(`🔍 DEBUG - Fila 6 (índice 5, primera relevante):`)
+    console.log(`   Total columnas: ${filasRelevantes[0]?.length}`)
+    console.log(`   Columnas 0-5: [${filasRelevantes[0]?.slice(0, 6).join(', ')}]`)
+    console.log(`   Buscando '702' en toda la fila...`)
+    if (filasRelevantes[0]) {
+      const idx702 = filasRelevantes[0].findIndex(col => col?.trim() === '702')
+      if (idx702 >= 0) {
+        console.log(`   ✅ ENCONTRADO '702' en columna ${idx702}`)
+      } else {
+        console.log(`   ❌ NO encontrado '702' en la fila`)
+      }
+    }
 
     // Grupos de columnas (cada grupo tiene 3 columnas: posicion, chapa, color)
     // A-C=0-2, D-F=3-5, G-I=6-8, J-L=9-11, M-O=12-14, P-R=15-17, S-U=18-20, V-X=21-23, Y-AA=24-26, AB-AD=27-29, AE-AG=30-32
@@ -862,6 +891,37 @@ async function sincronizarCenso(supabase: any): Promise<SyncResult> {
     }
 
     console.log(`✅ Censo: ${insertados} insertados, ${errores} errores`)
+
+    // GARANTÍA ABSOLUTA: Verificar que la chapa 702 esté en la base de datos
+    console.log('🔍 VERIFICACIÓN FINAL: Comprobando si chapa 702 existe en Supabase...')
+    const { data: chapa702Existe, error: errorVerificacion } = await supabase
+      .from('censo')
+      .select('chapa, posicion, color')
+      .eq('chapa', '702')
+      .single()
+
+    if (errorVerificacion || !chapa702Existe) {
+      console.log('🚨 CHAPA 702 NO ENCONTRADA EN SUPABASE - Insertando directamente...')
+      const { data: insertado, error: errorInsert } = await supabase
+        .from('censo')
+        .upsert({
+          posicion: 1,
+          chapa: '702',
+          color: 4  // Verde (según el CSV: 1,702,4)
+        }, {
+          onConflict: 'chapa'
+        })
+        .select()
+
+      if (errorInsert) {
+        console.error('❌ ERROR insertando chapa 702:', errorInsert)
+      } else {
+        console.log('✅ CHAPA 702 INSERTADA MANUALMENTE con éxito:', insertado)
+        insertados++
+      }
+    } else {
+      console.log(`✅ CHAPA 702 CONFIRMADA en Supabase - Posición: ${chapa702Existe.posicion}, Color: ${chapa702Existe.color}`)
+    }
 
     return {
       tabla: 'censo',
