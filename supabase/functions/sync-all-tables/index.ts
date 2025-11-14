@@ -752,12 +752,11 @@ async function sincronizarCenso(supabase: any): Promise<SyncResult> {
           continue
         }
 
-        const posVal = fila[colPos]?.trim() || ''
         const chapaVal = fila[colChapa]?.trim() || ''
         const colorVal = fila[colColor]?.trim() || ''
 
-        // Filtrar: debe tener valores en los 3 campos
-        if (!posVal || !chapaVal || !colorVal) {
+        // Filtrar: debe tener chapa y color (posVal no se usa, se genera secuencialmente)
+        if (!chapaVal || !colorVal) {
           continue
         }
 
