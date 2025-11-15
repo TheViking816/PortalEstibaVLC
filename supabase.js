@@ -15,11 +15,12 @@
 // CONFIGURACIÓN DE SUPABASE
 // ============================================================================
 
-// Dentro de supabase.js
+// Dentro de supabase.js (cerca de la línea 20)
 const SUPABASE_CONFIG = {
-  // ✅ CORRECTO: Leer variables de entorno de Vercel/Vite
-  URL: import.meta.env.VITE_SUPABASE_URL,
-  ANON_KEY: import.meta.env.VITE_SUPABASE_ANON_KEY, 
+  // 1. Usa la URL de tu Supabase de PRUEBA
+  URL: 'https://pqslqbszhnwitsxdxanx.supabase.co',
+  // 2. Usa la Anon Key de tu Supabase de PRUEBA
+  ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBxc2xxYnN6aG53aXRzeGR4YW54Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMyMjYwNDAsImV4cCI6MjA3ODgwMjA0MH0.BgwtRv-UACmg7aXegnsywXzY0LiyHBBLaD9uUZ1v8J0', 
   
   // La duración del caché permanece igual
   CACHE_DURATION: 5 * 60 * 1000
