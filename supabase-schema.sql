@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 -- ============================================================================
 -- PORTAL ESTIBA VLC - ESQUEMA DE BASE DE DATOS SUPABASE
 -- ============================================================================
@@ -287,6 +286,7 @@ SELECT
 FROM pg_tables
 WHERE schemaname = 'public'
 ORDER BY tablename;
+
 =======
 -- ============================================================================
 -- PORTAL ESTIBA VLC - ESQUEMA DE BASE DE DATOS SUPABASE
