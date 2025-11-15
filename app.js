@@ -203,10 +203,28 @@ async function initializeApp() {
     }
     const nombre = userData ? userData.nombre : `Chapa ${storedChapa}`;
     await loginUser(storedChapa, nombre);
+
+    // Manejar navegación por hash (para deep linking desde notificaciones)
+    handleHashNavigation();
   } else {
     showPage('login');
   }
 }
+
+/**
+ * Maneja la navegación basada en el hash de la URL
+ * Permite deep linking desde notificaciones push
+ */
+function handleHashNavigation() {
+  const hash = window.location.hash.slice(1); // Elimina el '#'
+  if (hash && AppState.isAuthenticated) {
+    console.log('📍 Navegando por hash:', hash);
+    navigateTo(hash);
+  }
+}
+
+// Listener para cambios en el hash
+window.addEventListener('hashchange', handleHashNavigation);
 
 // ============================================================================
 // AUTO-REFRESH PARA PRIMAS E IRPF (Cada 5 minutos)
@@ -792,6 +810,11 @@ function navigateTo(pageName) {
 
   AppState.currentPage = pageName;
   showPage(pageName);
+
+  // Actualizar hash en la URL (para deep linking)
+  if (pageName !== 'login' && window.location.hash !== `#${pageName}`) {
+    window.location.hash = pageName;
+  }
 
   // Cargar datos según la página
   switch (pageName) {
