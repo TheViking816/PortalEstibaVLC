@@ -17,8 +17,8 @@
 
 const SUPABASE_CONFIG = {
   // IMPORTANTE: Reemplaza estos valores con los tuyos desde Supabase Dashboard
-  URL: 'https://icszzxkdxatfytpmoviq.supabase.co', // Ej: https://xxxxx.supabase.co
-  ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imljc3p6eGtkeGF0Znl0cG1vdmlxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI2Mzk2NjUsImV4cCI6MjA3ODIxNTY2NX0.hmQWNB3sCyBh39gdNgQLjjlIvliwJje-OYf0kkPObVA', // Desde Settings > API > anon public
+  URL: 'https://pqslqbszhnwitsxdxanx.supabase.co', // Ej: https://xxxxx.supabase.co
+  ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBxc2xxYnN6aG53aXRzeGR4YW54Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMyMjYwNDAsImV4cCI6MjA3ODgwMjA0MH0.BgwtRv-UACmg7aXegnsywXzY0LiyHBBLaD9uUZ1v8J0', // Desde Settings > API > anon public
 
   // Duración del cache (5 minutos como antes)
   CACHE_DURATION: 5 * 60 * 1000
