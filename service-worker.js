@@ -80,11 +80,12 @@ self.addEventListener('fetch', event => {
 
   // Para APIs de terceros (Google Sheets, Supabase) y Imgur: Network First, fallback a Cache
   // Esto es crucial para datos dinámicos y para obtener las imágenes más recientes de Imgur.
-  if (url.hostname.includes('docs.google.com') ||
+ if (url.hostname.includes('docs.google.com') ||
       url.hostname.includes('googleapis.com') ||
+      url.hostname.includes('fonts.gstatic.com') || // <-- ¡AÑADIDO AQUÍ!
       url.hostname.includes('script.google.com') ||
-      url.hostname.includes('supabase.co') || // Añadido para tus llamadas a Supabase
-      url.hostname.includes('imgur.com') ) { // Añadido para tus imágenes de Imgur
+      url.hostname.includes('supabase.co') || 
+      url.hostname.includes('imgur.com') ) {
     
     let fetchOptions = {};
     // === INTENTO DE SOLUCIÓN PARA IMGUR 403 ===
