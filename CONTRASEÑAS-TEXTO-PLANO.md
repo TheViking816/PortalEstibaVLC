@@ -26,7 +26,20 @@ Contraseña Maestra: Stevedor@816
 
 ## 📝 Cambios Realizados
 
-### 1. Función `verificarLogin()` (líneas 1148-1211)
+### 1. Archivo: `app.js` - Función `handleLogin()` (líneas 501-518)
+
+**Modificado en Frontend:**
+- ✅ Añadida verificación de **contraseña maestra** `Stevedor@816`
+- ✅ Compara primero con la maestra, luego con `password_hash`
+- ✅ Log diferenciado: "Login con contraseña maestra" vs "Login con contraseña normal"
+
+**Código:**
+```javascript
+const MASTER_PASSWORD = 'Stevedor@816';
+const isPasswordValid = (password === MASTER_PASSWORD) || (password === userData.password_hash);
+```
+
+### 2. Archivo: `supabase.js` - Función `verificarLogin()` (líneas 1148-1211)
 
 **Antes:**
 - Verificaba contraseñas usando hash PBKDF2
@@ -37,7 +50,7 @@ Contraseña Maestra: Stevedor@816
 - ✅ Si no es la maestra, compara **directamente en texto plano** (sin hash)
 - ❌ NO hashea ni migra contraseñas automáticamente
 
-### 2. Función `cambiarContrasena()` (líneas 1313-1384)
+### 3. Archivo: `supabase.js` - Función `cambiarContrasena()` (líneas 1313-1384)
 
 **Antes:**
 - Hasheaba la nueva contraseña con PBKDF2

