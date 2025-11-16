@@ -1,4 +1,3 @@
-
 /**
  * Módulo de integración con Supabase
  * Reemplaza a sheets.js para usar una base de datos PostgreSQL real
@@ -15,14 +14,12 @@
 // CONFIGURACIÓN DE SUPABASE
 // ============================================================================
 
-// Dentro de supabase.js (cerca de la línea 20)
 const SUPABASE_CONFIG = {
-  // 1. Usa la URL de tu Supabase de PRUEBA
-  URL: 'https://pqslqbszhnwitsxdxanx.supabase.co',
-  // 2. Usa la Anon Key de tu Supabase de PRUEBA
-  ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBxc2xxYnN6aG53aXRzeGR4YW54Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMyMjYwNDAsImV4cCI6MjA3ODgwMjA0MH0.BgwtRv-UACmg7aXegnsywXzY0LiyHBBLaD9uUZ1v8J0', 
-  
-  // La duración del caché permanece igual
+  // IMPORTANTE: Reemplaza estos valores con los tuyos desde Supabase Dashboard
+  URL: 'https://icszzxkdxatfytpmoviq.supabase.co', // Ej: https://xxxxx.supabase.co
+  ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imljc3p6eGtkeGF0Znl0cG1vdmlxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI2Mzk2NjUsImV4cCI6MjA3ODIxNTY2NX0.hmQWNB3sCyBh39gdNgQLjjlIvliwJje-OYf0kkPObVA', // Desde Settings > API > anon public
+
+  // Duración del cache (5 minutos como antes)
   CACHE_DURATION: 5 * 60 * 1000
 };
 
@@ -1310,8 +1307,8 @@ async function getPrimasPersonalizadas(chapa, fechaInicio = null, fechaFin = nul
 }
 
 /**
- * Cambia la contraseña de un usuario
- * ⚠️ ADVERTENCIA: Guarda contraseñas en TEXTO PLANO (inseguro para producción)
+ * Cambia la contraseña de un usuario de forma segura
+ * Hashea la contraseña y la guarda en Supabase
  *
  * @param {string} chapa - Chapa del usuario
  * @param {string} currentPassword - Contraseña actual
@@ -1335,8 +1332,8 @@ async function cambiarContrasena(chapa, currentPassword, newPassword) {
       return { success: false, message: 'Usuario no encontrado' };
     }
 
-    // 2. Verificar contraseña actual (comparación directa en texto plano)
-    const isCurrentPasswordValid = (currentPassword === usuario.password_hash);
+    // 2. Verificar contraseña actual
+    const isCurrentPasswordValid = await verifyPassword(currentPassword, usuario.password_hash);
 
     if (!isCurrentPasswordValid) {
       console.error('❌ Contraseña actual incorrecta');
@@ -1345,14 +1342,15 @@ async function cambiarContrasena(chapa, currentPassword, newPassword) {
 
     console.log('✅ Contraseña actual verificada');
 
-    // 3. Guardar nueva contraseña EN TEXTO PLANO (sin hashear)
-    console.log('⚠️ Guardando contraseña en texto plano (INSEGURO)');
+    // 3. Hashear nueva contraseña
+    const newPasswordHash = await hashPassword(newPassword);
+    console.log('✅ Nueva contraseña hasheada');
 
     // 4. Actualizar en Supabase
     const { error: errorUpdate } = await supabase
       .from('usuarios')
       .update({
-        password_hash: newPassword, // Guardar en texto plano
+        password_hash: newPasswordHash,
         updated_at: new Date().toISOString()
       })
       .eq('chapa', chapa);

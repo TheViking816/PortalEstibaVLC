@@ -1,4 +1,3 @@
-
 -- Schema para tabla mensajes_foro
 -- Almacena mensajes del foro sincronizados desde Google Sheets
 
@@ -35,4 +34,3 @@ COMMENT ON TABLE mensajes_foro IS 'Mensajes del foro sincronizados desde Google 
 COMMENT ON COLUMN mensajes_foro.timestamp IS 'Timestamp del mensaje en formato de Google Sheets';
 COMMENT ON COLUMN mensajes_foro.chapa IS 'Chapa del usuario que escribió el mensaje';
 COMMENT ON COLUMN mensajes_foro.texto IS 'Contenido del mensaje';
-

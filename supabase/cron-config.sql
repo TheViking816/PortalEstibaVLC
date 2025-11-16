@@ -1,4 +1,3 @@
-
 -- Configuración de Cron Job para sincronización automática
 -- Se ejecuta cada 3 minutos entre las 07:00 y 16:00 (hora de España)
 
@@ -27,4 +26,3 @@ SELECT * FROM cron.job;
 
 -- 5. Ver historial de ejecuciones:
 -- SELECT * FROM cron.job_run_details ORDER BY start_time DESC LIMIT 10;
-
