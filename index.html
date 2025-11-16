@@ -904,11 +904,14 @@
             // Obtener la chapa del usuario desde localStorage
             const currentChapa = localStorage.getItem('currentChapa');
 
+            // Convertir subscription a JSON y agregar user_chapa
+            const subscriptionData = subscription.toJSON();
+
             const response = await fetch(`${BACKEND_API_URL}/subscribe`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    ...subscription,
+                    ...subscriptionData,
                     user_chapa: currentChapa
                 }),
             });
