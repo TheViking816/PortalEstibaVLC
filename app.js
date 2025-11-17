@@ -623,6 +623,19 @@ async function loginUser(chapa, nombre = null) {
     localStorage.setItem('usuarios_cache', JSON.stringify(usuariosCache));
   }
 
+  // Sincronizar censo automáticamente al login (en background, sin bloquear)
+  SheetsAPI.syncCensoFromCSV()
+    .then(result => {
+      if (result.success) {
+        console.log(`✅ Censo sincronizado automáticamente: ${result.count} items`);
+      } else {
+        console.warn('⚠️ No se pudo sincronizar censo:', result.message);
+      }
+    })
+    .catch(error => {
+      console.warn('⚠️ Error sincronizando censo:', error);
+    });
+
   // Actualizar UI
   updateUIForAuthenticatedUser();
 
