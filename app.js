@@ -3253,16 +3253,33 @@ async function loadSueldometro() {
       };
 
       if (esConductorOC) {
-        // Conductores OC tienen salarios fijos sin prima (solo laborables)
+        // Conductores OC tienen salarios fijos sin prima
+        // Tarifas diferenciadas por tipo de día (LABORABLE, SABADO, FESTIVO)
         esJornalFijo = true;
         const salariosOC = {
-          '08-14': 179.75,
-          '14-20': 179.75,
-          '20-02': 253.75,
-          '02-08': 321.75
+          // Jornada 02-08 (Super laboral)
+          '02-08_LABORABLE': 321.95,
+          '02-08_SABADO': 321.95,
+          '02-08_FESTIVO': 321.95,
+
+          // Jornada 08-14
+          '08-14_LABORABLE': 179.75,
+          '08-14_SABADO': 195.77,
+          '08-14_FESTIVO': 195.77,
+
+          // Jornada 14-20
+          '14-20_LABORABLE': 179.75,
+          '14-20_SABADO': 179.75,
+          '14-20_FESTIVO': 408.92,
+
+          // Jornada 20-02
+          '20-02_LABORABLE': 253.75,
+          '20-02_SABADO': 253.75,
+          '20-02_FESTIVO': 253.75
         };
 
-        salarioBase = salariosOC[jornada] || 0;
+        const claveOC = `${jornada}_${tipoDia}`;
+        salarioBase = salariosOC[claveOC] || salariosOC[jornada] || 0;
         prima = 0; // Sin prima para OC
       } else {
         // Cálculo normal para SP y Contenedor/Coches/Trincador
