@@ -178,6 +178,52 @@ document.addEventListener('DOMContentLoaded', () => {
   initializeApp();
   setupEventListeners();
   checkStoredSession();
+
+  // ===============================================
+  // NAVEGACIÓN AUTOMÁTICA DESDE NOTIFICACIONES PUSH
+  // ===============================================
+
+  // Escuchar mensajes del service worker para navegar automáticamente
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', (event) => {
+      if (event.data && event.data.type === 'NAVIGATE_TO_PAGE') {
+        const targetPage = event.data.page;
+        console.log('[App] Navegando automáticamente a:', targetPage);
+
+        // Verificar si el usuario está autenticado
+        if (AppState.isAuthenticated) {
+          navigateTo(targetPage);
+        } else {
+          // Si no está autenticado, guardar la página de destino y redirigir al login
+          sessionStorage.setItem('pendingNavigation', targetPage);
+          navigateTo('login');
+        }
+      }
+    });
+  }
+
+  // Al cargar la página, verificar si hay un query parameter 'page'
+  // Esto se usa cuando el usuario hace clic en una notificación y no hay ventana abierta
+  const urlParams = new URLSearchParams(window.location.search);
+  const targetPage = urlParams.get('page');
+
+  if (targetPage) {
+    console.log('[App] Query parameter detectado:', targetPage);
+
+    // Limpiar el query parameter de la URL sin recargar
+    const newUrl = window.location.pathname + window.location.hash;
+    window.history.replaceState({}, '', newUrl);
+
+    // Esperar a que la app se inicialice
+    setTimeout(() => {
+      if (AppState.isAuthenticated) {
+        navigateTo(targetPage);
+      } else {
+        // Si no está autenticado, guardar la página de destino
+        sessionStorage.setItem('pendingNavigation', targetPage);
+      }
+    }, 500);
+  }
 });
 
 /**
@@ -564,8 +610,16 @@ async function loginUser(chapa, nombre = null) {
   // Iniciar auto-refresh de primas e IRPF (cada 5 minutos)
   startAutoRefresh();
 
-  // Navegar al dashboard
-  navigateTo('dashboard');
+  // Verificar si hay una navegación pendiente desde una notificación
+  const pendingNavigation = sessionStorage.getItem('pendingNavigation');
+  if (pendingNavigation) {
+    console.log('[App] Navegación pendiente detectada:', pendingNavigation);
+    sessionStorage.removeItem('pendingNavigation');
+    navigateTo(pendingNavigation);
+  } else {
+    // Navegar al dashboard por defecto
+    navigateTo('dashboard');
+  }
 }
 
 /**

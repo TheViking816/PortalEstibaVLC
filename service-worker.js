@@ -172,10 +172,11 @@ self.addEventListener('push', (event) => {
   // Parsea los datos que vienen del backend
   const data = event.data ? event.data.json() : {};
   // Valores por defecto si el backend no los envía
-  const { 
-    title = 'Nueva Contratación en Estiba VLC', 
-    body = '¡Se ha publicado una nueva contratación en el puerto!', 
-    url = '/' 
+  const {
+    title = 'Nueva Contratación en Estiba VLC',
+    body = '¡Se ha publicado una nueva contratación en el puerto!',
+    url = '/?page=contratacion',
+    page = 'contratacion'
   } = data;
 
   const options = {
@@ -186,6 +187,7 @@ self.addEventListener('push', (event) => {
     vibrate: [200, 100, 200], // Patrón de vibración
     data: {
       url: url, // La URL a la que navegará el usuario al hacer clic en la notificación
+      page: page, // Página de destino para navegación interna
       dateOfArrival: Date.now(),
       primaryKey: 'push-notification-id-' + Date.now(), // ID único para evitar notificaciones duplicadas
     },
@@ -206,25 +208,25 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close(); // Cierra la notificación al hacer clic
 
+  const targetPage = event.notification.data.page || 'contratacion';
+  const targetUrl = event.notification.data.url || `/?page=${targetPage}`;
+
   // Abre una nueva ventana o enfoca una existente
   event.waitUntil(
-    clients.matchAll({ type: 'window' }).then((clientList) => {
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       // Si ya hay una ventana abierta a tu dominio, intenta enfocarla
       for (const client of clientList) {
         if (client.url.startsWith(self.location.origin) && 'focus' in client) {
-          // Si la acción es 'ver-contratacion' y tiene una URL específica, navega allí
-          if (event.action === 'ver-contratacion' && event.notification.data.url) {
-            client.navigate(event.notification.data.url);
-          }
+          // Enviar mensaje al cliente para que navegue a la página correcta
+          client.postMessage({
+            type: 'NAVIGATE_TO_PAGE',
+            page: targetPage
+          });
           return client.focus(); // Enfoca la ventana existente
         }
       }
-      // Si no hay ninguna ventana, abre una nueva
-      if (event.action === 'ver-contratacion' && event.notification.data.url) {
-        return clients.openWindow(event.notification.data.url);
-      }
-      // Si no hay URL específica en la notificación o es un clic general, abre la raíz de la app
-      return clients.openWindow(event.notification.data.url || '/'); 
+      // Si no hay ninguna ventana abierta, abre una nueva con el query parameter
+      return clients.openWindow(targetUrl);
     })
   );
 });
