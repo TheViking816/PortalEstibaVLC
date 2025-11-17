@@ -647,6 +647,12 @@ async function loginUser(chapa, nombre = null) {
 function updateUIForAuthenticatedUser() {
   const userInfo = document.getElementById('user-info');
   const userChapa = document.getElementById('user-chapa');
+  const sidebar = document.getElementById('sidebar');
+  const mainContent = document.getElementById('main-content');
+
+  // Mostrar sidebar y ajustar layout
+  if (sidebar) sidebar.classList.remove('hidden');
+  if (mainContent) mainContent.classList.remove('no-sidebar');
 
   if (userInfo) userInfo.classList.remove('hidden');
   if (userChapa) userChapa.textContent = AppState.currentUserName || `Chapa ${AppState.currentUser}`;
@@ -765,6 +771,12 @@ function handleLogout() {
   // Ocultar información de usuario
   const userInfo = document.getElementById('user-info');
   if (userInfo) userInfo.classList.add('hidden');
+
+  // Ocultar sidebar y ajustar layout
+  const sidebar = document.getElementById('sidebar');
+  const mainContent = document.getElementById('main-content');
+  if (sidebar) sidebar.classList.add('hidden');
+  if (mainContent) mainContent.classList.add('no-sidebar');
 
   // Navegar a login (esto activará la limpieza preventiva adicional)
   navigateTo('login');
@@ -975,6 +987,20 @@ function showPage(pageName) {
     targetPage.classList.add('active');
   } else {
     console.warn(`⚠️ Página con ID 'page-${pageName}' no encontrada.`);
+  }
+
+  // Controlar visibilidad del sidebar basado en autenticación
+  const sidebar = document.getElementById('sidebar');
+  const mainContent = document.getElementById('main-content');
+
+  if (pageName === 'login' || !AppState.isAuthenticated) {
+    // Ocultar sidebar en login o si no está autenticado
+    if (sidebar) sidebar.classList.add('hidden');
+    if (mainContent) mainContent.classList.add('no-sidebar');
+  } else if (AppState.isAuthenticated) {
+    // Mostrar sidebar si está autenticado
+    if (sidebar) sidebar.classList.remove('hidden');
+    if (mainContent) mainContent.classList.remove('no-sidebar');
   }
 
   // Actualizar navegación activa

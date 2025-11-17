@@ -1985,10 +1985,11 @@ const SheetsAPI = {
       // 3. Función auxiliar para contar trincadores NO ROJOS entre dos posiciones
       const contarTrincadoresEntre = (posicionInicio, posicionFin, esCircular) => {
         let trincadores = 0;
+        let trincadoresDetalle = [];
 
         if (!esCircular) {
           // Rango normal: de inicio a fin
-          trincadores = censo.filter(trabajador => {
+          const trincadoresFiltrados = censo.filter(trabajador => {
             const pos = trabajador.posicion;
             const color = trabajador.color;
             const esTrinca = trabajador.trincador === true || trabajador.trincador === 'true';
@@ -1997,10 +1998,12 @@ const SheetsAPI = {
             const noEsRojo = !(color === 'red');
 
             return esTrinca && noEsRojo && pos > posicionInicio && pos <= posicionFin && pos <= LIMITE_SP;
-          }).length;
+          });
+          trincadores = trincadoresFiltrados.length;
+          trincadoresDetalle = trincadoresFiltrados;
         } else {
           // Rango circular: de inicio hasta límite SP, luego de 1 hasta fin
-          trincadores = censo.filter(trabajador => {
+          const trincadoresFiltrados = censo.filter(trabajador => {
             const pos = trabajador.posicion;
             const color = trabajador.color;
             const esTrinca = trabajador.trincador === true || trabajador.trincador === 'true';
@@ -2010,7 +2013,15 @@ const SheetsAPI = {
 
             return esTrinca && noEsRojo && pos <= LIMITE_SP &&
                    ((pos > posicionInicio && pos <= LIMITE_SP) || (pos >= 1 && pos <= posicionFin));
-          }).length;
+          });
+          trincadores = trincadoresFiltrados.length;
+          trincadoresDetalle = trincadoresFiltrados;
+        }
+
+        // Log de debug para verificar que solo se cuentan trincadores disponibles
+        console.log(`🔍 Trincadores entre ${posicionInicio} y ${posicionFin} (${esCircular ? 'circular' : 'normal'}): ${trincadores}`);
+        if (trincadoresDetalle.length > 0 && trincadoresDetalle.length <= 20) {
+          console.log('📋 Detalle:', trincadoresDetalle.map(t => `Pos ${t.posicion} (${t.chapa}) - ${t.color}`).join(', '));
         }
 
         return trincadores;

@@ -251,6 +251,12 @@ body::before {
   min-height: calc(100vh - var(--header-height));
   position: relative;
   z-index: 1;
+  transition: margin-left 0.3s ease;
+}
+
+/* Main content sin sidebar (cuando no está autenticado) */
+.main-content.no-sidebar {
+  margin-left: 0;
 }
 
 .container {
