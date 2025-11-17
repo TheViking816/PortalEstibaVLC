@@ -660,13 +660,18 @@ function updateUIForAuthenticatedUser() {
     // Obtener y mostrar posiciones hasta contratación (laborable y festiva)
     Promise.all([
       SheetsAPI.getPosicionesHastaContratacion(AppState.currentUser),
-      SheetsAPI.getPosicionesTrinca(AppState.currentUser)
+      SheetsAPI.getPosicionesTrinca(AppState.currentUser),
+      SheetsAPI.getCenso()
     ])
-      .then(([posicionesObj, posicionesTrinca]) => {
+      .then(([posicionesObj, posicionesTrinca, censo]) => {
 
         // Limpiar cualquier span de posición anterior
         const existingSpans = welcomeMsg.querySelectorAll('span');
         existingSpans.forEach(span => span.remove());
+
+        // Verificar si el usuario actual tiene la especialidad de trincador
+        const userCenso = censo.find(c => c.chapa === AppState.currentUser.toString());
+        const esTrincador = userCenso && (userCenso.trincador === true || userCenso.trincador === 'true');
 
         if (posicionesObj) {
 
@@ -687,7 +692,8 @@ function updateUIForAuthenticatedUser() {
             welcomeMsg.appendChild(posicionInfoLab);
 
             // --- RENDERIZAR LÍNEA DE TRINCA LABORABLE (debajo) ---
-            if (posicionesTrinca && posicionesTrinca.laborable !== null) {
+            // Solo mostrar si el usuario tiene la especialidad de trincador
+            if (esTrincador && posicionesTrinca && posicionesTrinca.laborable !== null) {
               const posicionTrincaLab = document.createElement('span');
               posicionTrincaLab.style.display = 'block';
               posicionTrincaLab.style.marginTop = '0.15rem';
@@ -717,7 +723,8 @@ function updateUIForAuthenticatedUser() {
             welcomeMsg.appendChild(posicionInfoFest);
 
             // --- RENDERIZAR LÍNEA DE TRINCA FESTIVA (debajo) ---
-            if (posicionesTrinca && posicionesTrinca.festiva !== null) {
+            // Solo mostrar si el usuario tiene la especialidad de trincador
+            if (esTrincador && posicionesTrinca && posicionesTrinca.festiva !== null) {
               const posicionTrincaFest = document.createElement('span');
               posicionTrincaFest.style.display = 'block';
               posicionTrincaFest.style.marginTop = '0.15rem';
