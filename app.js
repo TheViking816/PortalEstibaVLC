@@ -3448,6 +3448,137 @@ async function loadSueldometro() {
 
     const monthNamesShort = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
+    // Función auxiliar para generar tarjetas móviles
+    const generarTarjetaMovil = (j, idx, year, month, quincena) => {
+      const cardId = `card-${year}-${month}-${quincena}-${idx}`;
+      const lockKey = `${j.fecha}_${j.jornada.replace(/\s+a\s+/g, '-').replace(/\s+/g, '')}`;
+      const lockedData = lockedValues[lockKey] || {};
+
+      let movimientosValue;
+      if (j.tipo_operativa === 'Trincador') {
+        movimientosValue = lockedData.movimientos !== undefined ? lockedData.movimientos : 0;
+      } else {
+        movimientosValue = lockedData.movimientos !== undefined ? lockedData.movimientos : (j.tipo_operativa === 'Contenedor' ? 120 : 0);
+      }
+
+      let primaValue = lockedData.prima !== undefined ? lockedData.prima : j.prima;
+      const horasRelevoValue = lockedData.horasRelevo || 0;
+      const horasRemateValue = lockedData.horasRemate || 0;
+      const barrasTrincaValue = j.tipo_operativa === 'Trincador' ? movimientosValue : 0;
+      const tipoOperacionTrincaValue = lockedData.tipoOperacionTrincaPersonalizada || null;
+
+      // Recalcular prima
+      if (j.tipo_operativa === 'Contenedor' && !j.es_jornal_fijo) {
+        const salarioInfo = tablaSalarial.find(s => s.clave_jornada === j.clave_jornada);
+        if (salarioInfo) {
+          primaValue = movimientosValue < 120
+            ? movimientosValue * salarioInfo.coef_prima_menor120
+            : movimientosValue * salarioInfo.coef_prima_mayor120;
+        }
+      }
+
+      if (j.tipo_operativa === 'Trincador' && barrasTrincaValue > 0 && tipoOperacionTrincaValue) {
+        const { horario_trinca, jornada_trinca } = mapearTipoDiaParaTrincaDestrinca(j.tipo_dia, j.jornada);
+        const tarifa = buscarTarifaTrincaDestrinca(tarifasTrincaDestrinca, horario_trinca, jornada_trinca, tipoOperacionTrincaValue);
+        primaValue = barrasTrincaValue * tarifa;
+      }
+
+      const tarifaRelevoCard = calcularTarifaRelevo(j.jornada.replace(/\s+a\s+/g, '-').replace(/\s+/g, ''), j.tipo_dia);
+      const importeRelevoCard = tarifaRelevoCard ? (horasRelevoValue * tarifaRelevoCard) : 0;
+      const tarifaRemateCard = calcularTarifaRemate(j.jornada.replace(/\s+a\s+/g, '-').replace(/\s+/g, ''), j.tipo_dia);
+      const importeRemateCard = tarifaRemateCard ? (horasRemateValue * tarifaRemateCard) : 0;
+
+      const brutoCard = j.salario_base + primaValue + importeRelevoCard + importeRemateCard;
+      const netoCard = brutoCard * (1 - irpfPorcentaje / 100);
+
+      // Generar campos según tipo
+      let camposHTML = '';
+      if (j.es_jornal_fijo) {
+        camposHTML = '<div class="jornal-card-field full-width"><label>Tipo</label><div class="jornal-card-value">Jornal Fijo OC</div></div>';
+      } else if (j.tipo_operativa === 'Contenedor') {
+        camposHTML = `
+          <div class="jornal-card-field">
+            <label>Movimientos</label>
+            <input type="number" class="card-movimientos-input" value="${movimientosValue}" min="0" data-jornal-index="${idx}">
+          </div>
+          <div class="jornal-card-field">
+            <label>Prima</label>
+            <input type="number" class="card-prima-input" value="${primaValue.toFixed(2)}" min="0" step="0.01" data-jornal-index="${idx}">
+          </div>`;
+      } else if (j.tipo_operativa === 'Trincador') {
+        camposHTML = `
+          <div class="jornal-card-field">
+            <label>Barras</label>
+            <input type="number" class="card-barras-input" value="${barrasTrincaValue}" min="0" data-jornal-index="${idx}">
+          </div>
+          <div class="jornal-card-field">
+            <label>Operación</label>
+            <select class="card-tipo-op-select" data-jornal-index="${idx}">
+              <option value="" ${!tipoOperacionTrincaValue ? 'selected' : ''}>Seleccionar</option>
+              <option value="TRINCA" ${tipoOperacionTrincaValue === 'TRINCA' ? 'selected' : ''}>Trinca</option>
+              <option value="DESTRINCA" ${tipoOperacionTrincaValue === 'DESTRINCA' ? 'selected' : ''}>Destrinca</option>
+            </select>
+          </div>
+          <div class="jornal-card-field full-width">
+            <label>Prima</label>
+            <input type="number" class="card-prima-input" value="${primaValue.toFixed(2)}" min="0" step="0.01" data-jornal-index="${idx}">
+          </div>`;
+      } else {
+        camposHTML = `
+          <div class="jornal-card-field full-width">
+            <label>Prima</label>
+            <input type="number" class="card-prima-input" value="${primaValue.toFixed(2)}" min="0" step="0.01" data-jornal-index="${idx}">
+          </div>`;
+      }
+
+      // Campo de relevo
+      if (tarifaRelevoCard !== null) {
+        camposHTML += `
+          <div class="jornal-card-field">
+            <label>Relevo (${tarifaRelevoCard.toFixed(2)}€)</label>
+            <select class="card-relevo-select" data-jornal-index="${idx}">
+              <option value="0" ${horasRelevoValue === 0 ? 'selected' : ''}>No</option>
+              <option value="1" ${horasRelevoValue > 0 ? 'selected' : ''}>Sí</option>
+            </select>
+          </div>`;
+      }
+
+      // Campo de remate
+      if (tarifaRemateCard !== null) {
+        camposHTML += `
+          <div class="jornal-card-field">
+            <label>Remate (${tarifaRemateCard.toFixed(2)}€/h)</label>
+            <select class="card-remate-select" data-jornal-index="${idx}">
+              <option value="0" ${horasRemateValue === 0 ? 'selected' : ''}>0h</option>
+              <option value="1" ${horasRemateValue === 1 ? 'selected' : ''}>1h</option>
+              <option value="2" ${horasRemateValue === 2 ? 'selected' : ''}>2h</option>
+            </select>
+          </div>`;
+      }
+
+      return `
+        <div class="jornal-card" id="${cardId}" data-lock-key="${lockKey}">
+          <div class="jornal-card-header">
+            <span class="jornal-card-date">${formatearFecha(j.fecha)}</span>
+            <span class="jornal-card-jornada">${j.jornada}</span>
+          </div>
+          <div class="jornal-card-body">
+            <div class="jornal-card-puesto">${j.puesto_display} • Base: ${j.salario_base.toFixed(2)}€${j.incluye_complemento ? '*' : ''}</div>
+            <div class="jornal-card-fields">${camposHTML}</div>
+          </div>
+          <div class="jornal-card-footer">
+            <div class="jornal-card-total">
+              <div class="jornal-card-total-label">Bruto</div>
+              <div class="jornal-card-total-value bruto card-bruto-value">${brutoCard.toFixed(2)}€</div>
+            </div>
+            <div class="jornal-card-total">
+              <div class="jornal-card-total-label">Neto</div>
+              <div class="jornal-card-total-value neto card-neto-value">${netoCard.toFixed(2)}€</div>
+            </div>
+          </div>
+        </div>`;
+    };
+
     // Función auxiliar para calcular tarifa de horas de relevo
     const calcularTarifaRelevo = (jornada, tipoDia) => {
       // No hay relevo en 02-08
@@ -3943,6 +4074,10 @@ async function loadSueldometro() {
               `}).join('')}
             </tbody>
           </table>
+        </div>
+        <!-- TARJETAS MÓVILES -->
+        <div class="jornales-cards">
+          ${jornalesQuincena.map((j, idx) => generarTarjetaMovil(j, idx, year, month, quincena)).join('')}
         </div>
         ${tieneComplemento ? `
           <div class="complemento-nota" style="font-size: 0.85rem; color: #666; margin-top: 0.5rem; padding: 0.5rem; background: #f9f9f9; border-radius: 4px;">
