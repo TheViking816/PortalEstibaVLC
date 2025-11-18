@@ -3533,11 +3533,11 @@ async function loadSueldometro() {
             <input type="number" class="acc-barras-input" value="${barrasTrincaValue}" min="0" data-jornal-index="${idx}">
           </div>
           <div class="accordion-field">
-            <label>Op.</label>
+            <label>Operación</label>
             <select class="acc-tipo-op-select" data-jornal-index="${idx}">
               <option value="" ${!tipoOperacionTrincaValue ? 'selected' : ''}>-</option>
-              <option value="TRINCA" ${tipoOperacionTrincaValue === 'TRINCA' ? 'selected' : ''}>T</option>
-              <option value="DESTRINCA" ${tipoOperacionTrincaValue === 'DESTRINCA' ? 'selected' : ''}>D</option>
+              <option value="TRINCA" ${tipoOperacionTrincaValue === 'TRINCA' ? 'selected' : ''}>Trinca</option>
+              <option value="DESTRINCA" ${tipoOperacionTrincaValue === 'DESTRINCA' ? 'selected' : ''}>Destrinca</option>
             </select>
           </div>
           <div class="accordion-field span-2">
