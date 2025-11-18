@@ -603,9 +603,9 @@ const SheetsAPI = {
       const censo = await this.getCenso();
       // --- FIN MODIFICACIÓN 1 ---
 
-      const LIMITE_SP = 449;
-      const INICIO_OC = 450;
-      const FIN_OC = 535;
+      const LIMITE_SP = 443;
+      const INICIO_OC = 444;
+      const FIN_OC = 519;
 
       const esUsuarioSP = posicionUsuario <= LIMITE_SP;
 
