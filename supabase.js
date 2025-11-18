@@ -187,19 +187,6 @@ async function verifyPassword(password, hash) {
     return false;
   }
 }
-
-/**
- * Genera una contraseña maestra hasheada para el administrador
- * Contraseña: Admin2025!
- */
-async function generateAdminPassword() {
-  const adminPassword = 'Admin2025!';
-  const hash = await hashPassword(adminPassword);
-  console.log('🔐 Hash de contraseña de administrador:');
-  console.log(hash);
-  return hash;
-}
-
 // ============================================================================
 // SISTEMA DE CACHE (Compatible con versión anterior)
 // ============================================================================
@@ -1851,7 +1838,6 @@ const SheetsAPI = {
   cambiarContrasena: cambiarContrasena, // Nueva función segura con hashing
   verificarLogin: verificarLogin, // Función de login
   hashPassword: hashPassword, // Exponer para uso en consola si es necesario
-  generateAdminPassword: generateAdminPassword, // Para generar hash de admin
 
   // Censo y posiciones
   getCenso: getCenso,
