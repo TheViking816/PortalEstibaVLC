@@ -31,6 +31,12 @@ let supabase = null;
  * Debe llamarse después de cargar la librería desde CDN
  */
 function initSupabase() {
+  // Si ya está inicializado, no volver a crear (evita múltiples instancias)
+  if (supabase) {
+    console.log('ℹ️ Supabase ya estaba inicializado');
+    return true;
+  }
+
   if (!window.supabase) {
     console.error('❌ Librería de Supabase no cargada. Agrega el script en index.html');
     return false;
