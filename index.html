@@ -155,7 +155,7 @@
           <form class="login-form" id="login-form" onsubmit="return false;">
             <div class="form-group">
               <label for="chapa-input">Número de Chapa</label>
-              <input type="number" id="chapa-input" placeholder="Introduce tu número de chapa" autocomplete="username">
+              <input type="text" id="chapa-input" inputmode="numeric" pattern="[0-9]*" placeholder="Introduce tu número de chapa" autocomplete="username">
             </div>
             <div class="form-group">
               <label for="password-input">Contraseña</label>
@@ -533,6 +533,8 @@
           <button id="close-password-modal" class="modal-close" type="button" aria-label="Cerrar">&times;</button>
         </div>
         <div class="modal-body">
+          <!-- Campo de username oculto para gestores de contraseñas -->
+          <input type="text" id="change-password-username" autocomplete="username" style="display:none;" aria-hidden="true">
           <div class="form-group">
             <label for="current-password">Contraseña Actual</label>
             <input type="password" id="current-password" placeholder="Introduce tu contraseña actual" autocomplete="current-password" required>
