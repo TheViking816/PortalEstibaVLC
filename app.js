@@ -1044,9 +1044,16 @@ function showPage(pageName) {
 function toggleSidebar() {
   const sidebar = document.getElementById('sidebar');
   const overlay = document.getElementById('sidebar-overlay');
+  const menuBtn = document.getElementById('menuBtn');
 
   sidebar.classList.toggle('active');
   overlay.classList.toggle('active');
+
+  // Actualizar aria-expanded para accesibilidad
+  const isOpen = sidebar.classList.contains('active');
+  if (menuBtn) {
+    menuBtn.setAttribute('aria-expanded', isOpen);
+  }
 }
 
 /**
@@ -1055,9 +1062,15 @@ function toggleSidebar() {
 function closeSidebar() {
   const sidebar = document.getElementById('sidebar');
   const overlay = document.getElementById('sidebar-overlay');
+  const menuBtn = document.getElementById('menuBtn');
 
   sidebar.classList.remove('active');
   overlay.classList.remove('active');
+
+  // Actualizar aria-expanded para accesibilidad
+  if (menuBtn) {
+    menuBtn.setAttribute('aria-expanded', 'false');
+  }
 }
 
 /**
