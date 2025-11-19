@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Portal Estiba VLC - Aplicación Principal
  * Gestiona la navegación, autenticación y lógica de la aplicación
  */
@@ -996,6 +996,9 @@ function navigateTo(pageName) {
       break;
     case 'noticias':
       renderNoticias(); // Se renderiza estáticamente, pero aseguramos llamada
+      break;
+    case 'calculadora':
+      loadCalculadora();
       break;
     case 'push-notifications':
         // Esta página se autoinicializa con un MutationObserver en index.html
@@ -5547,4 +5550,503 @@ function initSyncJornalesButton() {
   }
 }
 
+// =============================================================================
+// CALCULADORA PREDICTIVA - EL ORACULO
+// =============================================================================
 
+window.updateStepper = function(inputId, change) {
+  var input = document.getElementById(inputId);
+  if (input) {
+    var val = parseInt(input.value) || 0;
+    val += change;
+    if (val < 0) val = 0;
+    input.value = val;
+  }
+};
+
+function calcularResultadoJornada(posicionRestante) {
+  // posicionRestante: cuantas posiciones faltan para llegar al usuario
+  // Si es <= 0, el usuario ya esta dentro (sale contratado)
+  var clase, mensaje;
+
+  if (posicionRestante <= 0) {
+    clase = 'probability-high';
+    mensaje = 'Calienta que sales';
+  } else if (posicionRestante <= 10) {
+    clase = 'probability-medium';
+    mensaje = 'Va a estar justo';
+  } else {
+    clase = 'probability-low';
+    mensaje = 'No sales';
+  }
+
+  return { clase: clase, mensaje: mensaje, posicionRestante: posicionRestante };
+}
+
+function detectarSiguienteJornada(puertas) {
+  // Orden de contratacion de jornadas
+  var ordenJornadas = ['02-08', '08-14', '14-20', '20-02'];
+  var siguienteJornada = null;
+
+  // La ultima jornada que tiene datos ES la siguiente a contratar
+  // (el dato de puerta indica desde donde se va a empezar a contratar)
+  for (var i = 0; i < ordenJornadas.length; i++) {
+    var jornada = ordenJornadas[i];
+    var puertaData = puertas.find(function(p) { return p.jornada === jornada; });
+
+    if (puertaData) {
+      var puertaSP = puertaData.puertaSP;
+      var puertaOC = puertaData.puertaOC;
+      // Si tiene algun dato valido, esta es la siguiente jornada a contratar
+      if ((puertaSP && puertaSP.trim() !== '' && parseInt(puertaSP) > 0) ||
+          (puertaOC && puertaOC.trim() !== '' && parseInt(puertaOC) > 0)) {
+        siguienteJornada = jornada;
+      }
+    }
+  }
+
+  // Si no hay ninguna con datos, asumimos que la siguiente es 02-08
+  if (siguienteJornada === null) {
+    return '02-08';
+  }
+
+  return siguienteJornada;
+}
+
+async function loadCalculadora() {
+  var btnCalcular = document.getElementById('btn-calcular-probabilidad');
+  var resultadoDiv = document.getElementById('calc-resultado');
+
+  if (resultadoDiv) resultadoDiv.classList.add('hidden');
+
+  // Constantes del censo
+  var LIMITE_SP = 443;
+  var INICIO_OC = 444;
+  var FIN_OC = 519;
+  var TAMANO_SP = 443; // Posiciones 1-443
+  var TAMANO_OC = 76;  // Posiciones 444-519
+
+  // Obtener posicion del usuario
+  var posicionUsuario = await SheetsAPI.getPosicionChapa(AppState.currentUser);
+  var esUsuarioOC = posicionUsuario > LIMITE_SP;
+
+  // Obtener censo para calcular rojos (no disponibles)
+  var censoData = await SheetsAPI.getCenso();
+
+  // Separar censo SP y OC
+  var censoSP = censoData.filter(function(item) { return item.posicion <= LIMITE_SP; });
+  var censoOC = censoData.filter(function(item) { return item.posicion > LIMITE_SP; });
+
+  // Obtener puertas para detectar siguiente jornada
+  var puertasResult = await SheetsAPI.getPuertas();
+  var puertas = puertasResult.puertas;
+  var puertasLaborables = puertas.filter(function(p) { return p.jornada !== 'Festivo'; });
+
+  // Detectar siguiente jornada a contratar
+  var siguienteJornada = detectarSiguienteJornada(puertasLaborables);
+  console.log('Siguiente jornada a contratar:', siguienteJornada);
+
+  // Determinar que jornadas mostrar segun el caso
+  // SP: solo 3 jornadas (08-14, 14-20, 20-02) - los inputs van de 1 a 3
+  // OC: 4 jornadas con demanda fija (08-14=15, 14-20=15, 20-02=15, 02-08=5)
+  var jornadasConfigSP = {
+    '08-14': [
+      { id: '1', nombre: 'Manana (08-14)', codigo: '08-14', activa: true, pedirFijos: true },
+      { id: '2', nombre: 'Tarde (14-20)', codigo: '14-20', activa: true, pedirFijos: false },
+      { id: '3', nombre: 'Noche (20-02)', codigo: '20-02', activa: true, pedirFijos: false }
+    ],
+    '14-20': [
+      { id: '1', nombre: 'Tarde (14-20)', codigo: '14-20', activa: true, pedirFijos: true },
+      { id: '2', nombre: 'Noche (20-02)', codigo: '20-02', activa: true, pedirFijos: false }
+    ],
+    '20-02': [
+      { id: '1', nombre: 'Noche (20-02)', codigo: '20-02', activa: true, pedirFijos: true }
+    ],
+    '02-08': [
+      { id: '1', nombre: 'Manana (08-14)', codigo: '08-14', activa: true, pedirFijos: true },
+      { id: '2', nombre: 'Tarde (14-20)', codigo: '14-20', activa: true, pedirFijos: false },
+      { id: '3', nombre: 'Noche (20-02)', codigo: '20-02', activa: true, pedirFijos: false }
+    ]
+  };
+
+  var jornadasConfigOC = {
+    '08-14': [
+      { nombre: 'Manana (08-14)', codigo: '08-14', activa: true, demandaOC: 15 },
+      { nombre: 'Tarde (14-20)', codigo: '14-20', activa: true, demandaOC: 15 },
+      { nombre: 'Noche (20-02)', codigo: '20-02', activa: true, demandaOC: 15 },
+      { nombre: 'Super (02-08)', codigo: '02-08', activa: true, demandaOC: 5 }
+    ],
+    '14-20': [
+      { nombre: 'Tarde (14-20)', codigo: '14-20', activa: true, demandaOC: 15 },
+      { nombre: 'Noche (20-02)', codigo: '20-02', activa: true, demandaOC: 15 },
+      { nombre: 'Super (02-08)', codigo: '02-08', activa: true, demandaOC: 5 }
+    ],
+    '20-02': [
+      { nombre: 'Noche (20-02)', codigo: '20-02', activa: true, demandaOC: 15 },
+      { nombre: 'Super (02-08)', codigo: '02-08', activa: true, demandaOC: 5 }
+    ],
+    '02-08': [
+      { nombre: 'Manana (08-14)', codigo: '08-14', activa: true, demandaOC: 15 },
+      { nombre: 'Tarde (14-20)', codigo: '14-20', activa: true, demandaOC: 15 },
+      { nombre: 'Noche (20-02)', codigo: '20-02', activa: true, demandaOC: 15 },
+      { nombre: 'Super (02-08)', codigo: '02-08', activa: true, demandaOC: 5 }
+    ]
+  };
+
+  var jornadasConfig = esUsuarioOC ? jornadasConfigOC : jornadasConfigSP;
+
+  var jornadasAMostrar = jornadasConfig[siguienteJornada] || jornadasConfig['08-14'];
+
+  // Para OC: ocultar inputs de demanda y mostrar mensaje
+  var fijosCard = document.querySelector('.calculator-card');
+  var jornadaCards = document.querySelectorAll('.jornada-input-card');
+
+  if (esUsuarioOC) {
+    // Ocultar card de fijos para OC
+    var fijosInput = document.getElementById('calc-fijos');
+    if (fijosInput) {
+      var fijosGrid = fijosInput.closest('.calc-grid');
+      if (fijosGrid) fijosGrid.style.display = 'none';
+    }
+    // Ocultar completamente los inputs de demanda para OC
+    jornadaCards.forEach(function(card) {
+      card.style.display = 'none';
+    });
+  } else {
+    // SP: Mostrar inputs normalmente y limpiar mensajes de OC si existian
+    var fijosInput = document.getElementById('calc-fijos');
+    if (fijosInput) {
+      var fijosGrid = fijosInput.closest('.calc-grid');
+      if (fijosGrid) fijosGrid.style.display = '';
+    }
+    // Mostrar cards y limpiar mensajes de OC
+    jornadaCards.forEach(function(card) {
+      card.style.display = '';
+      card.querySelectorAll('input').forEach(function(input) {
+        input.disabled = false;
+        input.style.opacity = '1';
+      });
+      card.querySelectorAll('.step-btn').forEach(function(btn) {
+        btn.disabled = false;
+      });
+      // Eliminar mensaje de OC si existe
+      var ocMsg = card.querySelector('.oc-info');
+      if (ocMsg) {
+        ocMsg.remove();
+      }
+    });
+  }
+
+  // Actualizar UI para marcar jornadas inactivas (ya contratadas)
+  jornadasAMostrar.forEach(function(jornada, index) {
+    var card = jornadaCards[index];
+    if (card) {
+      if (!jornada.activa) {
+        card.classList.add('jornada-contratada');
+        card.querySelectorAll('input').forEach(function(input) {
+          input.disabled = true;
+          input.value = 0;
+        });
+        card.querySelectorAll('.step-btn').forEach(function(btn) {
+          btn.disabled = true;
+        });
+      } else if (!esUsuarioOC) {
+        card.classList.remove('jornada-contratada');
+        card.querySelectorAll('input').forEach(function(input) {
+          input.disabled = false;
+        });
+        card.querySelectorAll('.step-btn').forEach(function(btn) {
+          btn.disabled = false;
+        });
+      }
+    }
+  });
+
+  if (btnCalcular) {
+    var newBtn = btnCalcular.cloneNode(true);
+    btnCalcular.parentNode.replaceChild(newBtn, btnCalcular);
+
+    newBtn.addEventListener('click', async function() {
+      var fijos = parseInt(document.getElementById('calc-fijos').value) || 0;
+
+      newBtn.innerHTML = 'Calculando...';
+      newBtn.disabled = true;
+
+      try {
+        // Obtener puerta actual y posicion del usuario
+        var puertaActual = 0;
+        var puertaData = puertasLaborables.find(function(p) { return p.jornada === siguienteJornada; });
+        if (puertaData) {
+          puertaActual = parseInt(esUsuarioOC ? puertaData.puertaOC : puertaData.puertaSP) || 0;
+        }
+
+        var tamanoCenso = esUsuarioOC ? TAMANO_OC : TAMANO_SP;
+        var censoActual = esUsuarioOC ? censoOC : censoSP;
+
+        // Limites del censo actual
+        var limiteInicio = esUsuarioOC ? INICIO_OC : 1;
+        var limiteFin = esUsuarioOC ? FIN_OC : LIMITE_SP;
+
+        // Funcion para obtener posicion absoluta
+        function getPosAbsoluta(item) {
+          return item.posicion;
+        }
+
+        // Funcion para verificar si una posicion esta disponible
+        function estaDisponible(posicion) {
+          var item = censoActual.find(function(c) { return c.posicion === posicion; });
+          return item && item.color !== 'red';
+        }
+
+        // Contar total de rojos en el censo
+        var totalRojos = censoActual.filter(function(item) { return item.color === 'red'; }).length;
+        var totalDisponibles = tamanoCenso - totalRojos;
+
+        // Funcion para contar disponibles entre dos posiciones (en posiciones absolutas)
+        function contarDisponiblesEntre(desde, hasta) {
+          var disponibles = 0;
+
+          if (desde <= hasta) {
+            // Rango directo
+            for (var pos = desde + 1; pos <= hasta; pos++) {
+              if (estaDisponible(pos)) {
+                disponibles++;
+              }
+            }
+          } else {
+            // Rango con vuelta: desde -> fin + inicio -> hasta
+            for (var pos = desde + 1; pos <= limiteFin; pos++) {
+              if (estaDisponible(pos)) {
+                disponibles++;
+              }
+            }
+            for (var pos = limiteInicio; pos <= hasta; pos++) {
+              if (estaDisponible(pos)) {
+                disponibles++;
+              }
+            }
+          }
+
+          return disponibles;
+        }
+
+        // Funcion para calcular distancia efectiva hasta usuario (solo disponibles)
+        function calcularDistanciaEfectiva(puerta, usuario) {
+          if (usuario > puerta) {
+            // Usuario esta delante
+            return contarDisponiblesEntre(puerta, usuario);
+          } else if (usuario < puerta) {
+            // Usuario esta detras, hay que dar la vuelta
+            return contarDisponiblesEntre(puerta, limiteFin) + contarDisponiblesEntre(limiteInicio - 1, usuario);
+          } else {
+            // Misma posicion
+            return 0;
+          }
+        }
+
+        // Funcion para verificar si el usuario sale contratado
+        // Avanza posicion por posicion, contando solo disponibles
+        function verificarContratacion(puertaInicio, demanda, usuario) {
+          var posActual = puertaInicio;
+          var contratados = 0;
+          var vueltas = 0;
+          var usuarioAlcanzado = false;
+          var maxIteraciones = tamanoCenso * 3;
+          var iteraciones = 0;
+
+          while (contratados < demanda && iteraciones < maxIteraciones) {
+            posActual++;
+            if (posActual > limiteFin) {
+              posActual = limiteInicio;
+              vueltas++;
+            }
+
+            // Si esta posicion esta disponible, se contrata
+            if (estaDisponible(posActual)) {
+              contratados++;
+              if (posActual === usuario) {
+                usuarioAlcanzado = true;
+              }
+            }
+            // Si esta en rojo, la puerta avanza pero no cuenta como contratado
+
+            iteraciones++;
+          }
+
+          return {
+            alcanzado: usuarioAlcanzado,
+            puertaFinal: posActual,
+            vueltas: vueltas,
+            contratados: contratados
+          };
+        }
+
+        var resultadosHTML = '';
+        var mejorJornada = null;
+        var mejorProbabilidad = 0;
+        var esPrimeraJornadaActiva = true;
+        var puertaPrevista = puertaActual;
+
+        // Posicion del usuario para calculos (posicion REAL, no relativa)
+        var posUsuarioCalc = posicionUsuario;
+
+        // Acumulador de demanda para saber cuando da la vuelta
+        var demandaAcumulada = 0;
+
+        for (var i = 0; i < jornadasAMostrar.length; i++) {
+          var jornada = jornadasAMostrar[i];
+
+          // Si la jornada ya se contrato, NO mostrar
+          if (!jornada.activa) {
+            continue;
+          }
+
+          // Obtener demanda
+          var demandaTotal;
+          if (esUsuarioOC) {
+            demandaTotal = jornada.demandaOC;
+          } else {
+            var gruas = parseInt(document.getElementById('calc-gruas-' + jornada.id).value) || 0;
+            var coches = parseInt(document.getElementById('calc-coches-' + jornada.id).value) || 0;
+            demandaTotal = (gruas * 7) + coches;
+          }
+
+          if (demandaTotal === 0 && !esUsuarioOC) {
+            resultadosHTML += '<div class="calc-resultado-item probability-none"><div class="resultado-header"><span class="resultado-jornada">' + jornada.nombre + '</span></div><div class="resultado-mensaje">Sin datos</div><div class="resultado-detalle">Introduce la demanda</div></div>';
+            continue;
+          }
+
+          // Calcular demanda para eventuales (restar fijos solo en primera jornada activa, solo SP)
+          var demandaEventuales;
+          if (!esUsuarioOC && esPrimeraJornadaActiva) {
+            demandaEventuales = Math.max(0, demandaTotal - fijos);
+            esPrimeraJornadaActiva = false;
+          } else {
+            demandaEventuales = demandaTotal;
+          }
+
+          // Guardar puerta antes del avance
+          var puertaAntes = puertaPrevista;
+
+          // Verificar si el usuario sale contratado usando la funcion que recorre el censo
+          var resultadoContratacion = verificarContratacion(puertaAntes, demandaEventuales, posUsuarioCalc);
+
+          puertaPrevista = resultadoContratacion.puertaFinal;
+          var vuelta = resultadoContratacion.vueltas + 1;
+          var saleContratado = resultadoContratacion.alcanzado;
+
+          // Calcular cuantas posiciones disponibles faltan para llegar al usuario
+          var distanciaNecesaria = calcularDistanciaEfectiva(puertaAntes, posUsuarioCalc);
+
+          // Si ya paso la posicion del usuario en una vuelta anterior, la distancia es 0
+          demandaAcumulada += demandaEventuales;
+          var enSegundaVuelta = demandaAcumulada > totalDisponibles;
+
+          // En segunda vuelta, aproximar que solo el 50% estara disponible
+          // Esto afecta cuanto "avanza" realmente la demanda
+          var demandaEfectiva = demandaEventuales;
+          if (enSegundaVuelta) {
+            // En segunda vuelta cada posicion de demanda cubre 2 posiciones de censo (50% disponible)
+            demandaEfectiva = Math.floor(demandaEventuales * 2);
+          }
+
+          // Calcular margen
+          var margen;
+          if (saleContratado) {
+            // Cuantas posiciones despues del usuario llega la puerta
+            var posicionesHastaUsuario = calcularDistanciaEfectiva(puertaAntes, posUsuarioCalc);
+            margen = demandaEventuales - posicionesHastaUsuario;
+          } else {
+            // Cuantas posiciones faltan para llegar al usuario
+            margen = demandaEventuales - distanciaNecesaria;
+          }
+
+          // Calcular probabilidad basada en el margen
+          var probabilidad;
+          var clase;
+          var mensaje;
+
+          if (saleContratado) {
+            // El usuario sale contratado
+            if (margen >= 50) {
+              probabilidad = 95;
+              mensaje = 'Calienta que sales';
+            } else if (margen >= 20) {
+              probabilidad = 85;
+              mensaje = 'Calienta que sales';
+            } else if (margen >= 10) {
+              probabilidad = 75;
+              mensaje = 'Calienta que sales';
+            } else if (margen >= 5) {
+              probabilidad = 65;
+              mensaje = 'Va a estar justo';
+            } else {
+              probabilidad = 55;
+              mensaje = 'Va a estar justo';
+            }
+            clase = probabilidad >= 75 ? 'probability-high' : 'probability-medium';
+          } else {
+            // El usuario NO sale contratado
+            var faltante = Math.abs(margen);
+
+            if (faltante <= 5) {
+              probabilidad = 40;
+              mensaje = 'Va a estar justo';
+              clase = 'probability-medium';
+            } else if (faltante <= 15) {
+              probabilidad = 25;
+              mensaje = 'Dificil';
+              clase = 'probability-medium';
+            } else if (faltante <= 50) {
+              probabilidad = 15;
+              mensaje = 'No sales';
+              clase = 'probability-low';
+            } else {
+              probabilidad = Math.max(5, 10 - Math.floor(faltante / 20));
+              mensaje = 'No sales';
+              clase = 'probability-low';
+            }
+          }
+
+          if (probabilidad > mejorProbabilidad) {
+            mejorProbabilidad = probabilidad;
+            mejorJornada = jornada.nombre;
+          }
+
+          // Mostrar info
+          var infoPos = 'Puerta: ' + puertaAntes + ' -> ' + puertaPrevista + ' | Tu pos: ' + posUsuarioCalc;
+          if (vuelta > 1) {
+            infoPos += ' (v' + vuelta + ')';
+          }
+          infoPos += ' | Faltan: ' + distanciaNecesaria;
+
+          resultadosHTML += '<div class="calc-resultado-item ' + clase + '"><div class="resultado-header"><span class="resultado-jornada">' + jornada.nombre + '</span><span class="resultado-prob">' + probabilidad + '%</span></div><div class="resultado-mensaje">' + mensaje + '</div><div class="resultado-posicion">' + infoPos + ' | Demanda: ' + demandaEventuales + '</div></div>';
+        }
+
+        // Resumen del dia
+        var resumenMensaje = '';
+        if (mejorProbabilidad >= 75) {
+          resumenMensaje = 'Mejor opcion: ' + mejorJornada + ' (' + mejorProbabilidad + '%)';
+        } else if (mejorProbabilidad >= 25) {
+          resumenMensaje = 'Posibilidades en: ' + mejorJornada + ' (' + mejorProbabilidad + '%)';
+        } else {
+          resumenMensaje = 'Hoy lo tienes dificil';
+        }
+
+        // Mostrar posicion REAL del usuario (no relativa)
+        var resumenHTML = '<div class="calc-resumen-dia"><div class="resumen-titulo">Resumen del dia</div><div class="resumen-mensaje">' + resumenMensaje + '</div><div class="resumen-posicion">Tu posicion: ' + posicionUsuario + ' | Puerta actual: ' + puertaActual + '</div></div>';
+
+        resultadoDiv.innerHTML = resumenHTML + resultadosHTML;
+        resultadoDiv.classList.remove('hidden');
+        resultadoDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+      } catch (error) {
+        console.error('Error:', error);
+        alert('Error al calcular: ' + error.message);
+      } finally {
+        newBtn.innerHTML = 'Calcular el Dia Completo';
+        newBtn.disabled = false;
+      }
+    });
+  }
+}

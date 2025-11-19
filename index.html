@@ -92,6 +92,12 @@
         </svg>
         Sueldómetro
       </button>
+      <button class="nav-link" data-page="calculadora">
+        <svg xmlns="http://www.w3.org/2000/svg" class="nav-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+        </svg>
+        El Oráculo
+      </button>
       <button class="nav-link" data-page="puertas">
         <svg xmlns="http://www.w3.org/2000/svg" class="nav-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -463,6 +469,128 @@
             </button>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- PÁGINA CALCULADORA PREDICTIVA (EL ORÁCULO) -->
+    <section id="page-calculadora" class="page">
+      <div class="page-hero small">
+        <img src="https://i.imgur.com/guKCoFy.jpeg" alt="Calculadora Estiba">
+        <div class="page-hero-content">
+          <h2>El Oraculo</h2>
+          <p>Calcula en que turno del dia vas a entrar</p>
+        </div>
+      </div>
+      <div class="container">
+        <!-- Enlaces Rápidos -->
+        <div class="quick-links-card">
+          <h3 style="color: white; margin-bottom: 1rem;">Consulta los datos oficiales:</h3>
+          <div class="quick-links-buttons">
+            <a href="https://noray.cpevalencia.com/PrevisionDemanda.asp" target="_blank" class="btn-glass">Ver Demanda (Gruas)</a>
+            <a href="https://noray.cpevalencia.com/Chapero.asp" target="_blank" class="btn-glass">Ver Fijos (Chapero)</a>
+          </div>
+        </div>
+
+        <!-- Formulario con todas las jornadas -->
+        <div class="calculator-card">
+          <h3 class="section-title">Introduce los datos de cada jornada</h3>
+
+          <!-- Fijos disponibles (comun para todas) -->
+          <div class="calc-form-group">
+            <label>Fijos Disponibles (Chapero)</label>
+            <div class="stepper full-width">
+              <button class="step-btn minus" onclick="updateStepper('calc-fijos', -5)">-5</button>
+              <input type="number" id="calc-fijos" value="100" min="0">
+              <button class="step-btn plus" onclick="updateStepper('calc-fijos', 5)">+5</button>
+            </div>
+            <p class="help-text">Numero entre parentesis en "no contratado (X)"</p>
+          </div>
+
+          <!-- Jornada Mañana 08-14 -->
+          <div class="jornada-input-card">
+            <div class="jornada-header">
+              <span class="jornada-badge manana">08:00 - 14:00</span>
+              <span class="jornada-label">Manana</span>
+            </div>
+            <div class="calc-grid">
+              <div class="calc-input-wrapper">
+                <label>Gruas</label>
+                <div class="stepper">
+                  <button class="step-btn minus" onclick="updateStepper('calc-gruas-1', -1)">-</button>
+                  <input type="number" id="calc-gruas-1" value="0" min="0">
+                  <button class="step-btn plus" onclick="updateStepper('calc-gruas-1', 1)">+</button>
+                </div>
+              </div>
+              <div class="calc-input-wrapper">
+                <label>Coches</label>
+                <div class="stepper">
+                  <button class="step-btn minus" onclick="updateStepper('calc-coches-1', -1)">-</button>
+                  <input type="number" id="calc-coches-1" value="0" min="0">
+                  <button class="step-btn plus" onclick="updateStepper('calc-coches-1', 1)">+</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Jornada Tarde 14-20 -->
+          <div class="jornada-input-card">
+            <div class="jornada-header">
+              <span class="jornada-badge tarde">14:00 - 20:00</span>
+              <span class="jornada-label">Tarde</span>
+            </div>
+            <div class="calc-grid">
+              <div class="calc-input-wrapper">
+                <label>Gruas</label>
+                <div class="stepper">
+                  <button class="step-btn minus" onclick="updateStepper('calc-gruas-2', -1)">-</button>
+                  <input type="number" id="calc-gruas-2" value="0" min="0">
+                  <button class="step-btn plus" onclick="updateStepper('calc-gruas-2', 1)">+</button>
+                </div>
+              </div>
+              <div class="calc-input-wrapper">
+                <label>Coches</label>
+                <div class="stepper">
+                  <button class="step-btn minus" onclick="updateStepper('calc-coches-2', -1)">-</button>
+                  <input type="number" id="calc-coches-2" value="0" min="0">
+                  <button class="step-btn plus" onclick="updateStepper('calc-coches-2', 1)">+</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Jornada Noche 20-02 -->
+          <div class="jornada-input-card">
+            <div class="jornada-header">
+              <span class="jornada-badge noche">20:00 - 02:00</span>
+              <span class="jornada-label">Noche</span>
+            </div>
+            <div class="calc-grid">
+              <div class="calc-input-wrapper">
+                <label>Gruas</label>
+                <div class="stepper">
+                  <button class="step-btn minus" onclick="updateStepper('calc-gruas-3', -1)">-</button>
+                  <input type="number" id="calc-gruas-3" value="0" min="0">
+                  <button class="step-btn plus" onclick="updateStepper('calc-gruas-3', 1)">+</button>
+                </div>
+              </div>
+              <div class="calc-input-wrapper">
+                <label>Coches</label>
+                <div class="stepper">
+                  <button class="step-btn minus" onclick="updateStepper('calc-coches-3', -1)">-</button>
+                  <input type="number" id="calc-coches-3" value="0" min="0">
+                  <button class="step-btn plus" onclick="updateStepper('calc-coches-3', 1)">+</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button id="btn-calcular-probabilidad" class="btn-primary btn-large pulsate" style="margin-top: 2rem;">
+            Calcular el Dia Completo
+          </button>
+        </div>
+
+        <!-- Resultados -->
+        <div id="calc-resultado" class="calc-resultados-container hidden"></div>
       </div>
     </section>
 

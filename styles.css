@@ -3062,6 +3062,454 @@ body::before {
 
   #jornales-stats .stat-label {
     /* Reducir el texto descriptivo */
-    font-size: 0.85rem; 
+    font-size: 0.85rem;
+  }
+}
+
+/* =============================================================================
+   CALCULADORA - EL ORÁCULO
+   ============================================================================= */
+
+.quick-links-card {
+  background: linear-gradient(135deg, var(--puerto-blue), var(--puerto-blue-dark));
+  padding: 1.5rem;
+  border-radius: 16px;
+  margin-bottom: 2rem;
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+}
+
+.quick-links-buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.btn-glass {
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(5px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  padding: 0.75rem 1.5rem;
+  border-radius: 50px;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+}
+
+.btn-glass:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: translateY(-2px);
+}
+
+.calculator-card {
+  background: white;
+  border-radius: 16px;
+  padding: 2rem;
+  box-shadow: var(--shadow-xl);
+  border: 1px solid var(--border-color);
+}
+
+.section-title {
+  color: var(--puerto-blue);
+  margin-bottom: 1.5rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.calc-form-group {
+  margin-bottom: 1rem;
+}
+
+.calc-form-group label {
+  display: block;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+  font-size: 0.95rem;
+}
+
+.calc-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.calc-input-wrapper label {
+  display: block;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+  font-size: 0.95rem;
+}
+
+.calc-select {
+  width: 100%;
+  padding: 1rem;
+  border: 2px solid var(--border-color);
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--puerto-blue);
+  background-color: #f8fafc;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.calc-select:focus {
+  outline: none;
+  border-color: var(--puerto-teal);
+  background: white;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  background: #f1f5f9;
+  border-radius: 12px;
+  padding: 4px;
+  border: 1px solid var(--border-color);
+}
+
+.stepper.full-width {
+  width: 100%;
+}
+
+.stepper input {
+  width: 100%;
+  text-align: center;
+  border: none;
+  background: transparent;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--puerto-blue);
+  padding: 0.5rem;
+  appearance: none;
+  -moz-appearance: textfield;
+}
+
+.stepper input::-webkit-outer-spin-button,
+.stepper input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.step-btn {
+  width: 45px;
+  height: 45px;
+  border: none;
+  border-radius: 8px;
+  font-size: 1.5rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.step-btn.minus {
+  background: #e2e8f0;
+  color: var(--text-secondary);
+}
+
+.step-btn.minus:hover {
+  background: #cbd5e1;
+}
+
+.step-btn.plus {
+  background: var(--puerto-blue);
+  color: white;
+}
+
+.step-btn.plus:hover {
+  background: var(--puerto-blue-dark);
+}
+
+.help-text {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-top: 0.5rem;
+  font-style: italic;
+}
+
+.pulsate {
+  animation: pulse-btn 2s infinite;
+}
+
+@keyframes pulse-btn {
+  0% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(16, 185, 129, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
+
+.result-card {
+  margin-top: 2rem;
+  padding: 2rem;
+  border-radius: 16px;
+  text-align: center;
+  animation: slideUp 0.4s ease;
+  color: white;
+}
+
+.result-card.probability-high {
+  background: linear-gradient(135deg, #10b981, #059669);
+  box-shadow: 0 10px 25px rgba(16, 185, 129, 0.4);
+}
+
+.result-card.probability-medium {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  box-shadow: 0 10px 25px rgba(245, 158, 11, 0.4);
+}
+
+.result-card.probability-low {
+  background: linear-gradient(135deg, #ef4444, #b91c1c);
+  box-shadow: 0 10px 25px rgba(239, 68, 68, 0.4);
+}
+
+.result-percent {
+  font-size: 3.5rem;
+  font-weight: 800;
+  margin-bottom: 0.5rem;
+  line-height: 1;
+}
+
+.result-message {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 1.5rem;
+}
+
+.result-details {
+  background: rgba(0, 0, 0, 0.2);
+  padding: 1rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  text-align: left;
+}
+
+.result-details ul {
+  margin: 0;
+  padding: 0;
+}
+
+.result-details li {
+  padding: 0.25rem 0;
+}
+
+/* Tarjetas de jornada */
+.jornada-input-card {
+  background: #f8fafc;
+  border: 2px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  transition: all 0.2s;
+}
+
+.jornada-input-card:hover {
+  border-color: var(--puerto-blue-light);
+}
+
+/* Jornadas ya contratadas */
+.jornada-input-card.jornada-contratada {
+  background: #e5e7eb;
+  border-color: #d1d5db;
+  opacity: 0.6;
+}
+
+.jornada-input-card.jornada-contratada .jornada-badge {
+  background: #9ca3af !important;
+}
+
+.jornada-input-card.jornada-contratada input,
+.jornada-input-card.jornada-contratada .step-btn {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* Resultados de jornadas ya contratadas */
+.calc-resultado-item.jornada-ya-contratada {
+  opacity: 0.5;
+}
+
+.jornada-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.jornada-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: white;
+}
+
+.jornada-badge.manana {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+}
+
+.jornada-badge.tarde {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+}
+
+.jornada-badge.noche {
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
+}
+
+.jornada-label {
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+/* Contenedor de resultados múltiples */
+.calc-resultados-container {
+  margin-top: 2rem;
+}
+
+.calc-resultado-item {
+  padding: 1.5rem;
+  border-radius: 12px;
+  margin-bottom: 1rem;
+  color: white;
+  animation: slideUp 0.4s ease;
+}
+
+.calc-resultado-item.probability-high {
+  background: linear-gradient(135deg, #10b981, #059669);
+  box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
+}
+
+.calc-resultado-item.probability-medium {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  box-shadow: 0 8px 20px rgba(245, 158, 11, 0.3);
+}
+
+.calc-resultado-item.probability-low {
+  background: linear-gradient(135deg, #ef4444, #b91c1c);
+  box-shadow: 0 8px 20px rgba(239, 68, 68, 0.3);
+}
+
+.calc-resultado-item.probability-none {
+  background: linear-gradient(135deg, #6b7280, #4b5563);
+  box-shadow: 0 8px 20px rgba(107, 114, 128, 0.3);
+}
+
+.resultado-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.resultado-jornada {
+  font-size: 1rem;
+  font-weight: 700;
+  opacity: 0.9;
+}
+
+.resultado-percent {
+  font-size: 2rem;
+  font-weight: 800;
+}
+
+.resultado-prob {
+  font-size: 1.5rem;
+  font-weight: 800;
+  opacity: 0.9;
+}
+
+.resultado-mensaje {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.resultado-detalle {
+  font-size: 0.85rem;
+  opacity: 0.9;
+}
+
+.resultado-posicion {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  font-size: 0.8rem;
+  opacity: 0.8;
+}
+
+/* Resumen del día */
+.calc-resumen-dia {
+  background: linear-gradient(135deg, var(--puerto-blue), var(--puerto-blue-dark));
+  color: white;
+  padding: 1.5rem;
+  border-radius: 12px;
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+.resumen-titulo {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  opacity: 0.9;
+}
+
+.resumen-mensaje {
+  font-size: 1.5rem;
+  font-weight: 800;
+}
+
+/* Responsive calculadora */
+@media (max-width: 768px) {
+  .calc-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .calculator-card {
+    padding: 1.5rem;
+  }
+
+  .result-percent {
+    font-size: 2.5rem;
+  }
+
+  .result-message {
+    font-size: 1.1rem;
+  }
+
+  .quick-links-buttons {
+    flex-direction: column;
+  }
+
+  .btn-glass {
+    width: 100%;
+  }
+
+  .jornada-input-card {
+    padding: 0.75rem;
+  }
+
+  .resultado-percent {
+    font-size: 1.5rem;
+  }
+
+  .resultado-mensaje {
+    font-size: 1rem;
   }
 }
