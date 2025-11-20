@@ -1487,13 +1487,19 @@ async function getForoMensajes(limit = 50) {
     const { data, error } = await supabase
       .from('mensajes_foro')
       .select('*')
-      .order('timestamp', { ascending: false })
+      .order('created_at', { ascending: false })
       .limit(limit);
 
     if (error) throw error;
 
-    setCachedData(cacheKey, data);
-    return data;
+    // Mapear created_at a timestamp para compatibilidad con app.js
+    const dataConTimestamp = data.map(msg => ({
+      ...msg,
+      timestamp: msg.created_at
+    }));
+
+    setCachedData(cacheKey, dataConTimestamp);
+    return dataConTimestamp;
 
   } catch (error) {
     console.error('❌ Error al obtener mensajes del foro:', error);
