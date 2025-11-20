@@ -67,8 +67,10 @@ export async function redirectToCheckout(chapa) {
     }
 
   } catch (error) {
-    console.error('❌ Error en checkout:', error);
-    alert(`Error al procesar el pago: ${error.message}\n\nPor favor, intenta de nuevo.`);
+    console.error('❌ Error COMPLETO en checkout:', error);
+    console.error('Stack trace:', error.stack);
+    console.error('Error message:', error.message);
+    alert(`Error al procesar el pago: ${error.message}\n\nRevisa la consola (F12) para más detalles.`);
   }
 }
 
