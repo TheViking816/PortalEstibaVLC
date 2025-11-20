@@ -158,6 +158,40 @@ class AIEngine {
         confidence: 0.85
       },
 
+      // VER CONTRATACIÓN (SPREADSHEET)
+      'ver_contratacion': {
+        patterns: [
+          /ver (la )?contrataci(ó|o)n/i,
+          /(abrir?|abreme|abre|ver) (la )?(hoja|planilla) (de )?contrataci(ó|o)n/i,
+          /contrataciones? del d(í|i)a/i
+        ],
+        response: 'abrir_contratacion',
+        confidence: 0.85
+      },
+
+      // VER CHAPERO
+      'ver_chapero': {
+        patterns: [
+          /ver (el )?chapero/i,
+          /(abrir?|abreme|abre|ver) (el )?censo/i,
+          /lista (de )?trabajadores/i,
+          /chapas?/i
+        ],
+        response: 'abrir_chapero',
+        confidence: 0.85
+      },
+
+      // COMUNICACIONES OFICINA
+      'comunicaciones': {
+        patterns: [
+          /comunicaciones? (de la )?oficina/i,
+          /(abrir?|abreme|abre) comunicaciones?/i,
+          /formulario comunicaci(ó|o)n/i
+        ],
+        response: 'abrir_comunicaciones',
+        confidence: 0.85
+      },
+
       // SALUDOS
       'saludo': {
         patterns: [
@@ -335,6 +369,32 @@ class AIEngine {
     }
 
     if (intent.action === 'confirmar_accion') {
+      // Verificar si hay detalles de jornales pendientes
+      const jornalesDetail = localStorage.getItem('pending_jornales_detail');
+
+      if (jornalesDetail) {
+        const jornales = JSON.parse(jornalesDetail);
+        localStorage.removeItem('pending_jornales_detail');
+
+        let respuesta = `📋 **Detalles completos de jornales:**\n\n`;
+
+        for (const jornal of jornales) {
+          const fecha = jornal.fecha ? new Date(jornal.fecha).toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: '2-digit' }) : '-';
+          respuesta += `**${fecha}**\n`;
+          respuesta += `  • Empresa: ${jornal.empresa || 'N/A'}\n`;
+          respuesta += `  • Puesto: ${jornal.puesto || 'N/A'}\n`;
+          respuesta += `  • Jornada: ${jornal.jornada || 'N/A'}\n`;
+          if (jornal.buque) respuesta += `  • Buque: ${jornal.buque}\n`;
+          respuesta += `\n`;
+        }
+
+        return {
+          text: respuesta,
+          intent: intent.name,
+          confidence: intent.confidence
+        };
+      }
+
       // Si el usuario dice "sí", ejecutar la última acción pendiente
       const lastAction = localStorage.getItem('pending_action');
 
@@ -402,7 +462,7 @@ class AIEngine {
         confidence: intent.confidence,
         action: {
           type: 'open_link',
-          url: 'https://noray.cpevalencia.com/NoDisponibilidad.asp'
+          url: 'https://docs.google.com/forms/d/e/1FAIpQLSfXcs0lOG7beU9HMfum-6eKkwmZCjcvnOQXaFiiY8EAb9rpYA/closedform'
         }
       };
     }
@@ -414,7 +474,43 @@ class AIEngine {
         confidence: intent.confidence,
         action: {
           type: 'open_link',
-          url: 'https://noray.cpevalencia.com/PuntoMano.asp'
+          url: 'https://docs.google.com/forms/d/e/1FAIpQLSeGKl5gwKrcj110D_6xhHVo0bn7Fo56tneof68dRyS6xUrD7Q/viewform'
+        }
+      };
+    }
+
+    if (intent.action === 'abrir_contratacion') {
+      return {
+        text: "Te abro la hoja de contratación del día.",
+        intent: intent.name,
+        confidence: intent.confidence,
+        action: {
+          type: 'open_link',
+          url: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSTtbkA94xqjf81lsR7bLKKtyES2YBDKs8J2T4UrSEan7e5Z_eaptShCA78R1wqUyYyASJxmHj3gDnY/pubhtml?gid=1388412839&single=true'
+        }
+      };
+    }
+
+    if (intent.action === 'abrir_chapero') {
+      return {
+        text: "Te abro el chapero (censo de trabajadores).",
+        intent: intent.name,
+        confidence: intent.confidence,
+        action: {
+          type: 'open_link',
+          url: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTrMuapybwZUEGPR1vsP9p1_nlWvznyl0sPD4xWsNJ7HdXCj1ABY1EpU1um538HHZQyJtoAe5Niwrxq/pubhtml?gid=841547354&single=true'
+        }
+      };
+    }
+
+    if (intent.action === 'abrir_comunicaciones') {
+      return {
+        text: "Te abro el formulario de comunicaciones con la oficina.",
+        intent: intent.name,
+        confidence: intent.confidence,
+        action: {
+          type: 'open_link',
+          url: 'https://docs.google.com/forms/d/e/1FAIpQLSc_wN20zG_88wmAAyXRsCxokTpfvxRKdILHr5BxrQUuNGqvyQ/closedform'
         }
       };
     }
@@ -551,14 +647,36 @@ class AIEngine {
         };
       }
 
+      // Crear resumen de jornales
+      let respuesta = `📊 **${jornales.quincena}**: llevas **${jornales.total} jornales**\n\n`;
+
+      // Mostrar los primeros 5 jornales como resumen
+      const jornalesParaMostrar = jornales.jornales.slice(0, 5);
+
+      respuesta += `**Últimos jornales:**\n`;
+      for (const jornal of jornalesParaMostrar) {
+        const fecha = jornal.fecha ? new Date(jornal.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' }) : '-';
+        respuesta += `• ${fecha} - ${jornal.empresa || 'N/A'} (${jornal.jornada || 'N/A'})\n`;
+      }
+
+      if (jornales.total > 5) {
+        respuesta += `\n_...y ${jornales.total - 5} jornales más_\n`;
+      }
+
+      // Guardar acción pendiente para mostrar todos los detalles
+      localStorage.setItem('pending_jornales_detail', JSON.stringify(jornales.jornales));
+
+      respuesta += `\n¿Quieres ver todos los detalles?`;
+
       return {
-        text: `Esta quincena llevas **${jornales.total} jornales** trabajados.`,
+        text: respuesta,
         intent: 'jornales',
         confidence: 0.9,
         data: {
           type: 'jornales',
           total: jornales.total,
-          quincena: jornales.quincena
+          quincena: jornales.quincena,
+          jornales: jornales.jornales
         }
       };
 

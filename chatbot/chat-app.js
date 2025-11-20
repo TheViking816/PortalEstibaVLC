@@ -107,11 +107,24 @@ class ChatApp {
     // Inicializar motor de IA
     await this.aiEngine.initialize(this.dataBridge);
 
-    // Configurar xAI (Grok) API
-    const xaiApiKey = 'xai-P1Orrc3QPYydaUfa1OobT4RQELO9Nd4Y1YBwHzwvfLyB6oNeRRSkPVZoDQoGaz6S7JDiMwMi4nRgweNH';
-    this.aiEngine.setApiKey(xaiApiKey);
-    this.aiEngine.setMode('xai');
-    console.log('✅ xAI (Grok) configurado en modo:', this.aiEngine.mode);
+    // Modo LOCAL por ahora (configurar Groq cuando tengas API key)
+    // Para conseguir API key GRATUITA de Groq:
+    // 1. Ve a https://console.groq.com
+    // 2. Crea cuenta gratis
+    // 3. Ve a "API Keys" y genera una nueva key
+    // 4. Sustituye aquí abajo
+
+    const groqApiKey = null; // <- Pega tu API key de Groq aquí
+
+    if (groqApiKey) {
+      this.aiEngine.setApiKey(groqApiKey);
+      this.aiEngine.setMode('groq');
+      console.log('✅ Groq API configurado');
+    } else {
+      this.aiEngine.setMode('local');
+      console.log('✅ Modo LOCAL (patrón matching)');
+      console.log('💡 Para usar Groq AI: https://console.groq.com → API Keys');
+    }
 
     // Cargar configuración
     this.voiceHandler.loadSettings();
@@ -130,21 +143,26 @@ class ChatApp {
 
     // Exponer funciones de debugging globalmente
     window.chatDebug = {
-      cambiarChapa: (chapa) => this.dataBridge.cambiarChapa(chapa),
+      cambiarChapa: async (chapa, password) => {
+        if (!password) {
+          console.error('❌ Uso: chatDebug.cambiarChapa(816, "tu_contraseña")');
+          return;
+        }
+        await this.dataBridge.cambiarChapa(chapa, password);
+      },
       verChapa: () => {
         console.log('Chapa actual:', this.dataBridge.currentChapa);
         return this.dataBridge.currentChapa;
       },
-      resetChapa: () => {
-        localStorage.removeItem('currentChapa');
-        console.log('✅ Chapa eliminada. Recarga la página para introducir una nueva.');
+      cerrarSesion: () => {
+        this.dataBridge.cerrarSesion();
       }
     };
 
     console.log('💡 Funciones de debug disponibles:');
-    console.log('  - chatDebug.cambiarChapa(816)  // Cambiar a chapa 816');
-    console.log('  - chatDebug.verChapa()          // Ver chapa actual');
-    console.log('  - chatDebug.resetChapa()        // Borrar chapa y empezar de nuevo');
+    console.log('  - chatDebug.cambiarChapa(816, "pass")  // Cambiar a chapa 816');
+    console.log('  - chatDebug.verChapa()                 // Ver chapa actual');
+    console.log('  - chatDebug.cerrarSesion()             // Cerrar sesión');
   }
 
   /**

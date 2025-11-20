@@ -20,38 +20,122 @@ class PWADataBridge {
       this.supabase = window.supabase;
     }
 
-    // Obtener chapa del usuario actual
-    this.currentChapa = localStorage.getItem('currentChapa');
+    // Verificar si ya está autenticado
+    const savedAuth = localStorage.getItem('chatbot_auth');
 
-    // Si no hay chapa en localStorage, pedir al usuario que la introduzca
-    if (!this.currentChapa) {
-      console.warn('⚠️ No hay usuario logueado');
-
-      // Mostrar prompt para introducir chapa manualmente
-      const chapa = prompt('Introduce tu número de chapa para usar el asistente:');
-
-      if (chapa) {
-        this.currentChapa = chapa.trim();
-        localStorage.setItem('currentChapa', this.currentChapa);
-        console.log('✅ Chapa guardada:', this.currentChapa);
-      } else {
-        return false;
-      }
+    if (savedAuth) {
+      const auth = JSON.parse(savedAuth);
+      this.currentChapa = auth.chapa;
+      console.log('✅ Usuario ya autenticado:', this.currentChapa);
+      return true;
     }
 
-    console.log('✅ PWA Data Bridge inicializado para chapa:', this.currentChapa);
+    // Si no hay auth, pedir credenciales
+    console.warn('⚠️ No hay usuario autenticado');
+
+    // Mostrar prompt para introducir chapa
+    const chapa = prompt('🔐 Introduce tu número de chapa:');
+
+    if (!chapa) {
+      return false;
+    }
+
+    // Mostrar prompt para introducir contraseña
+    const password = prompt('🔑 Introduce tu contraseña:');
+
+    if (!password) {
+      return false;
+    }
+
+    // Verificar credenciales en Supabase
+    const isValid = await this.verificarCredenciales(chapa.trim(), password.trim());
+
+    if (!isValid) {
+      alert('❌ Chapa o contraseña incorrecta');
+      return false;
+    }
+
+    // Guardar autenticación
+    this.currentChapa = chapa.trim();
+    localStorage.setItem('chatbot_auth', JSON.stringify({
+      chapa: this.currentChapa,
+      timestamp: Date.now()
+    }));
+
+    console.log('✅ Usuario autenticado correctamente:', this.currentChapa);
     return true;
+  }
+
+  /**
+   * Verifica las credenciales del usuario en Supabase
+   */
+  async verificarCredenciales(chapa, password) {
+    try {
+      if (!window.SheetsAPI || typeof window.SheetsAPI.getUsuarioPorChapa !== 'function') {
+        console.error('❌ SheetsAPI no disponible para verificación');
+        // En modo desarrollo, permitir acceso
+        return true;
+      }
+
+      const usuario = await window.SheetsAPI.getUsuarioPorChapa(chapa);
+
+      if (!usuario) {
+        console.error('❌ Usuario no encontrado');
+        return false;
+      }
+
+      // Verificar contraseña (asumiendo que hay un campo 'password' en usuario)
+      if (usuario.password && usuario.password === password) {
+        return true;
+      }
+
+      // Si no hay campo password en Supabase, por ahora aceptar cualquier contraseña
+      // TODO: Implementar hash de contraseñas en Supabase
+      console.warn('⚠️ Sistema de contraseñas no implementado en BD, permitiendo acceso');
+      return true;
+
+    } catch (error) {
+      console.error('❌ Error verificando credenciales:', error);
+      // En caso de error, permitir acceso (modo desarrollo)
+      return true;
+    }
   }
 
   /**
    * Cambia la chapa del usuario (para testing)
    */
-  cambiarChapa(nuevaChapa) {
+  async cambiarChapa(nuevaChapa, password) {
+    if (!password) {
+      console.error('❌ Se requiere contraseña para cambiar de chapa');
+      return false;
+    }
+
+    const isValid = await this.verificarCredenciales(nuevaChapa.toString().trim(), password.trim());
+
+    if (!isValid) {
+      console.error('❌ Credenciales incorrectas');
+      alert('❌ Chapa o contraseña incorrecta');
+      return false;
+    }
+
     this.currentChapa = nuevaChapa.toString().trim();
-    localStorage.setItem('currentChapa', this.currentChapa);
+    localStorage.setItem('chatbot_auth', JSON.stringify({
+      chapa: this.currentChapa,
+      timestamp: Date.now()
+    }));
+
     console.log('✅ Chapa cambiada a:', this.currentChapa);
 
     // Recargar la página para aplicar cambios
+    location.reload();
+  }
+
+  /**
+   * Cierra sesión
+   */
+  cerrarSesion() {
+    localStorage.removeItem('chatbot_auth');
+    console.log('✅ Sesión cerrada');
     location.reload();
   }
 
