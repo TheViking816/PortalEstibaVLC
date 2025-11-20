@@ -2263,6 +2263,10 @@ const SheetsAPI = {
 if (typeof window !== 'undefined') {
   window.SheetsAPI = SheetsAPI;
   console.log('✅ SheetsAPI exportado globalmente');
+
+  // Disparar evento personalizado para avisar que está listo
+  window.dispatchEvent(new CustomEvent('SheetsAPIReady', { detail: { SheetsAPI } }));
+  console.log('📢 Evento SheetsAPIReady disparado');
 }
 
 // Auto-inicializar Supabase cuando se carga el DOM

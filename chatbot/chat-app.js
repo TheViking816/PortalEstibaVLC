@@ -29,21 +29,49 @@ class ChatApp {
   /**
    * Espera a que SheetsAPI esté disponible
    */
-  async waitForSheetsAPI(maxAttempts = 10) {
+  async waitForSheetsAPI(timeoutMs = 10000) {
     console.log('⏳ Esperando a que SheetsAPI esté disponible...');
 
-    for (let i = 0; i < maxAttempts; i++) {
+    return new Promise((resolve) => {
+      // Si ya está disponible, resolver inmediatamente
       if (window.SheetsAPI && typeof window.SheetsAPI.getJornales === 'function') {
-        console.log('✅ SheetsAPI está disponible');
-        return true;
+        console.log('✅ SheetsAPI ya estaba disponible');
+        resolve(true);
+        return;
       }
 
-      console.log(`⏳ Intento ${i + 1}/${maxAttempts} - SheetsAPI no disponible, esperando...`);
-      await new Promise(resolve => setTimeout(resolve, 500));
-    }
+      // Timeout de seguridad
+      const timeout = setTimeout(() => {
+        console.error('❌ Timeout esperando SheetsAPI');
+        resolve(false);
+      }, timeoutMs);
 
-    console.error('❌ SheetsAPI no se cargó después de esperar');
-    return false;
+      // Escuchar el evento personalizado
+      window.addEventListener('SheetsAPIReady', function handler() {
+        console.log('📢 Evento SheetsAPIReady recibido');
+        clearTimeout(timeout);
+        window.removeEventListener('SheetsAPIReady', handler);
+
+        // Verificar que realmente está disponible
+        if (window.SheetsAPI && typeof window.SheetsAPI.getJornales === 'function') {
+          console.log('✅ SheetsAPI está disponible y listo para usar');
+          resolve(true);
+        } else {
+          console.error('❌ SheetsAPI evento recibido pero no está disponible');
+          resolve(false);
+        }
+      }, { once: true });
+
+      // También verificar cada 100ms por si el evento ya se disparó
+      const interval = setInterval(() => {
+        if (window.SheetsAPI && typeof window.SheetsAPI.getJornales === 'function') {
+          console.log('✅ SheetsAPI detectado por polling');
+          clearTimeout(timeout);
+          clearInterval(interval);
+          resolve(true);
+        }
+      }, 100);
+    });
   }
 
   /**
