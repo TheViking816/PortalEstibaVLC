@@ -107,24 +107,10 @@ class ChatApp {
     // Inicializar motor de IA
     await this.aiEngine.initialize(this.dataBridge);
 
-    // Modo LOCAL por ahora (configurar Groq cuando tengas API key)
-    // Para conseguir API key GRATUITA de Groq:
-    // 1. Ve a https://console.groq.com
-    // 2. Crea cuenta gratis
-    // 3. Ve a "API Keys" y genera una nueva key
-    // 4. Sustituye aquí abajo
-
-    const groqApiKey = null; // <- Pega tu API key de Groq aquí
-
-    if (groqApiKey) {
-      this.aiEngine.setApiKey(groqApiKey);
-      this.aiEngine.setMode('groq');
-      console.log('✅ Groq API configurado');
-    } else {
-      this.aiEngine.setMode('local');
-      console.log('✅ Modo LOCAL (patrón matching)');
-      console.log('💡 Para usar Groq AI: https://console.groq.com → API Keys');
-    }
+    // SIEMPRE usar modo LOCAL para tener acceso a datos reales
+    // Groq causa problemas porque no tiene acceso directo a Supabase
+    this.aiEngine.setMode('local');
+    console.log('✅ Modo LOCAL con datos reales de Supabase');
 
     // Cargar configuración
     this.voiceHandler.loadSettings();

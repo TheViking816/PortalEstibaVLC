@@ -76,7 +76,9 @@ class AIEngine {
           /cuánto (llevo|he) ganado (este|el) año/i,
           /total (del )?año/i,
           /ganancia anual/i,
-          /salario anual/i
+          /salario anual/i,
+          /ganado (este|en el) año/i,
+          /llevo ganado.*año/i
         ],
         response: 'consultar_salario_anual',
         confidence: 0.9
@@ -113,7 +115,9 @@ class AIEngine {
           /en qué empresa/i,
           /qué (especialidad|puesto)/i,
           /mi contratación/i,
-          /dónde (me han contratado|estoy contratado)/i
+          /dónde (me han contratado|estoy contratado)/i,
+          /trabaj(o|as) hoy/i,
+          /^hoy.*trabaj/i
         ],
         response: 'consultar_contratacion',
         confidence: 0.9
