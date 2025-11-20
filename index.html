@@ -322,31 +322,34 @@
         </div>
       </div>
       <div class="container">
-        <div id="sueldometro-loading" class="loading-state">
-          <div class="spinner"></div>
-          <p>Calculando salarios...</p>
-        </div>
-        <div id="sueldometro-irpf-control" class="irpf-control collapsed" style="display: none;">
-          <div class="irpf-control-header" onclick="this.parentElement.classList.toggle('collapsed')">
-            <span class="irpf-toggle">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-              </svg>
-            </span>
-            <span class="irpf-header-text">Configurar % IRPF</span>
-            <span id="irpf-display-value" class="irpf-display-value">15%</span>
+        <!-- Contenedor lockeable para Premium -->
+        <div id="sueldometro-container" style="position: relative; min-height: 400px;">
+          <div id="sueldometro-loading" class="loading-state">
+            <div class="spinner"></div>
+            <p>Calculando salarios...</p>
           </div>
-          <div class="irpf-control-content">
-            <label for="irpf-input">
-              <span class="irpf-label">% IRPF:</span>
-              <input type="number" id="irpf-input" min="0" max="50" step="0.1" value="15" />
-              <button id="irpf-lock-btn" class="lock-btn" title="Bloquear IRPF para que no cambie">🔓</button>
-              <span class="irpf-help">Introduce tu porcentaje de retención y bloquéalo con 🔒</span>
-            </label>
+          <div id="sueldometro-irpf-control" class="irpf-control collapsed" style="display: none;">
+            <div class="irpf-control-header" onclick="this.parentElement.classList.toggle('collapsed')">
+              <span class="irpf-toggle">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                </svg>
+              </span>
+              <span class="irpf-header-text">Configurar % IRPF</span>
+              <span id="irpf-display-value" class="irpf-display-value">15%</span>
+            </div>
+            <div class="irpf-control-content">
+              <label for="irpf-input">
+                <span class="irpf-label">% IRPF:</span>
+                <input type="number" id="irpf-input" min="0" max="50" step="0.1" value="15" />
+                <button id="irpf-lock-btn" class="lock-btn" title="Bloquear IRPF para que no cambie">🔓</button>
+                <span class="irpf-help">Introduce tu porcentaje de retención y bloquéalo con 🔒</span>
+              </label>
+            </div>
           </div>
+          <div id="sueldometro-stats" class="stats-grid"></div>
+          <div id="sueldometro-content"></div>
         </div>
-        <div id="sueldometro-stats" class="stats-grid"></div>
-        <div id="sueldometro-content"></div>
       </div>
     </section>
 
@@ -485,8 +488,10 @@
         </div>
       </div>
       <div class="container">
-        <!-- Enlaces Rápidos -->
-        <div class="quick-links-card">
+        <!-- Contenedor lockeable para Premium -->
+        <div id="oraculo-container" style="position: relative; min-height: 400px;">
+          <!-- Enlaces Rápidos -->
+          <div class="quick-links-card">
           <h3 style="color: white; margin-bottom: 1rem;">Consulta los datos oficiales:</h3>
           <div class="quick-links-buttons">
             <a href="https://noray.cpevalencia.com/PrevisionDemanda.asp" target="_blank" class="btn-glass">Ver Demanda (Gruas)</a>
@@ -600,8 +605,9 @@
           </button>
         </div>
 
-        <!-- Resultados -->
-        <div id="calc-resultado" class="calc-resultados-container hidden"></div>
+          <!-- Resultados -->
+          <div id="calc-resultado" class="calc-resultados-container hidden"></div>
+        </div>
       </div>
     </section>
 
@@ -842,6 +848,11 @@
   <!-- Data Layer: Usa supabase.js para base de datos PostgreSQL -->
   <!-- NOTA: Para volver a Google Sheets, reemplaza supabase.js con sheets.js -->
   <script src="supabase.js?v=22"></script>
+
+  <!-- Sistema Premium -->
+  <script type="module" src="services/premium.js"></script>
+  <script type="module" src="services/stripe.js"></script>
+  <script type="module" src="components/FeatureLock.js"></script>
 
   <script src="app.js?v=22"></script>
 

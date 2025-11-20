@@ -110,13 +110,15 @@ class ChatApp {
     // Configurar Groq API para mejorar las respuestas
     const groqApiKey = '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';
 
-    if (groqApiKey) {
+    // TEMPORALMENTE DESACTIVADO - Groq inventa datos (CSP, sueldómetro, etc)
+    // Usar modo LOCAL hasta que el prompt esté perfecto
+    if (false && groqApiKey) {
       this.aiEngine.setApiKey(groqApiKey);
       this.aiEngine.setMode('groq');
       console.log('✅ Modo GROQ habilitado (mejora respuestas con datos reales)');
     } else {
       this.aiEngine.setMode('local');
-      console.log('✅ Modo LOCAL con datos reales de Supabase');
+      console.log('✅ Modo LOCAL - Respuestas 100% con datos reales de Supabase');
     }
 
     // Cargar configuración

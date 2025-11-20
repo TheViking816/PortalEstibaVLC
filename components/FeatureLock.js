@@ -207,4 +207,10 @@ export const FEATURE_LOCK_STYLES = `
 }
 `;
 
+// Exportar para usar como módulo
 export default FeatureLock;
+
+// También hacer disponible globalmente para scripts no-módulo
+if (typeof window !== 'undefined') {
+  window.FeatureLock = FeatureLock;
+}

@@ -163,6 +163,59 @@ function formatearFecha(fecha) {
 }
 
 /**
+ * ========================================================================
+ * SISTEMA PREMIUM - Feature Locks
+ * ========================================================================
+ */
+
+/**
+ * Inicializa los bloqueos de features premium
+ */
+async function initPremiumFeatureLocks() {
+  try {
+    // Esperar a que los servicios estén cargados
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Verificar que FeatureLock está disponible
+    if (typeof FeatureLock === 'undefined') {
+      console.warn('⚠️ FeatureLock no está disponible. Sistema premium no activo.');
+      return;
+    }
+
+    const chapa = localStorage.getItem('currentChapa');
+
+    if (!chapa) {
+      console.log('ℹ️ Usuario no logueado, no verificar premium');
+      return;
+    }
+
+    console.log('🔐 Verificando acceso premium para chapa:', chapa);
+
+    // Bloquear Sueldómetro
+    const sueldometroLock = new FeatureLock('sueldometro');
+    const sueldometroBloqueado = await sueldometroLock.bloquear('#sueldometro-container');
+
+    if (sueldometroBloqueado) {
+      console.log('🔒 Sueldómetro bloqueado - requiere premium');
+    }
+
+    // Bloquear Oráculo
+    const oraculoLock = new FeatureLock('oraculo');
+    const oraculoBloqueado = await oraculoLock.bloquear('#oraculo-container');
+
+    if (oraculoBloqueado) {
+      console.log('🔒 Oráculo bloqueado - requiere premium');
+    }
+
+    // Nota: El Chatbot IA tiene su propio sistema de control en su página
+    // No necesitamos bloquearlo aquí
+
+  } catch (error) {
+    console.error('❌ Error inicializando feature locks:', error);
+  }
+}
+
+/**
  * Inicialización de la aplicación
  */
 document.addEventListener('DOMContentLoaded', () => {
@@ -185,6 +238,11 @@ document.addEventListener('DOMContentLoaded', () => {
   initializeApp();
   setupEventListeners();
   checkStoredSession();
+
+  // ===============================================
+  // SISTEMA PREMIUM - Bloquear features
+  // ===============================================
+  initPremiumFeatureLocks();
 
   // ===============================================
   // NAVEGACIÓN AUTOMÁTICA DESDE NOTIFICACIONES PUSH
