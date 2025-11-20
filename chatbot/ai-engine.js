@@ -14,6 +14,11 @@ class AIEngine {
     this.apiKey = null;
     this.dataBridge = null; // Se inyectará desde chat-app.js
 
+    // Sistema de contexto conversacional
+    this.conversationHistory = [];
+    this.lastIntent = null;
+    this.lastData = null;
+
     // Base de conocimiento: patrones de intenciones
     this.intents = {
       // CONSULTAS DE TRABAJO
@@ -141,12 +146,14 @@ class AIEngine {
           /(abrir?|abreme|abre) (el )?formulario (de )?no disponibilidad/i,
           /no (puedo|voy a) trabajar/i,
           /reportar ausencia/i,
-          /no disponible/i,
+          /^no disponible$/i,
           /(quiero|voy a) poner(me)? no disponible/i,
-          /ponme no disponible/i
+          /ponme no disponible/i,
+          /^no disponible/i,
+          /disponible$/i
         ],
         response: 'abrir_no_disponible',
-        confidence: 0.85
+        confidence: 0.9
       },
 
       // ACCIONES - PUNTO Y HS
@@ -220,6 +227,21 @@ class AIEngine {
         ],
         response: 'ayuda',
         confidence: 0.9
+      },
+
+      // SEGUIMIENTO / MÁS INFORMACIÓN
+      'seguimiento': {
+        patterns: [
+          /^(dame|dime|muestra|enseña) (los?|el|la|las)? ?(detalles?|información|info|datos)/i,
+          /^(más|mas) (detalles?|información|info)/i,
+          /^cuéntame más/i,
+          /^amplía/i,
+          /^explica/i,
+          /^y (eso|esto)\??$/i,
+          /^(detalles?|información|info)$/i
+        ],
+        response: 'ampliar_informacion',
+        confidence: 0.95
       },
 
       // RESPUESTAS AFIRMATIVAS
@@ -305,11 +327,21 @@ class AIEngine {
     }
 
     // Detectar intención
-    const intent = this.detectIntent(cleanMessage);
+    let intent = this.detectIntent(cleanMessage);
     console.log('🎯 Intención detectada:', intent);
+
+    // Si pide más información/detalles, usar el último intent
+    if (intent.action === 'ampliar_informacion' && this.lastIntent) {
+      console.log('📖 Ampliando información del último intent:', this.lastIntent.action);
+      intent = this.lastIntent; // Reutilizar el último intent
+    }
 
     // SIEMPRE generar respuesta local primero (con datos reales)
     const localResponse = await this.generateLocalResponse(intent, userMessage);
+
+    // Guardar el intent y datos para próximas consultas
+    this.lastIntent = intent;
+    this.lastData = localResponse.data;
 
     // Si estamos en modo Groq y hay datos, mejorar la redacción
     if (this.mode === 'groq' && this.apiKey && localResponse.data) {

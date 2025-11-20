@@ -850,11 +850,20 @@
   <script src="supabase.js?v=22"></script>
 
   <!-- Sistema Premium -->
-  <script type="module" src="services/premium.js"></script>
-  <script type="module" src="services/stripe.js"></script>
-  <script type="module" src="components/FeatureLock.js"></script>
+  <script type="module">
+    // Importar y exponer globalmente
+    import FeatureLock from './components/FeatureLock.js';
+    import { tienePremium, tieneAccesoFeature } from './services/premium.js';
+    import { redirectToCheckout, initStripe } from './services/stripe.js';
 
-  <script src="app.js?v=22"></script>
+    window.FeatureLock = FeatureLock;
+    window.premiumServices = { tienePremium, tieneAccesoFeature };
+    window.stripeServices = { redirectToCheckout, initStripe };
+
+    console.log('✅ Servicios Premium cargados globalmente');
+  </script>
+
+  <script src="app.js?v=23"></script>
 
   <!-- PWA Service Worker Registration -->
   <script>

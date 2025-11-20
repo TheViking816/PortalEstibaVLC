@@ -10,7 +10,10 @@
       "Bash(powershell:*)",
       "Bash(git checkout:*)",
       "Bash(xxd:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(cat:*)",
+      "Bash(git config:*)",
+      "Bash(md5sum:*)"
     ],
     "deny": [],
     "ask": []
