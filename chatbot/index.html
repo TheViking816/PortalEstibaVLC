@@ -51,17 +51,29 @@
   <main id="chat-container" class="chat-container">
     <!-- Welcome message -->
     <div class="welcome-card">
-      <div class="welcome-icon">🤖</div>
-      <h2>¡Hola, <span id="user-name">trabajador</span>!</h2>
-      <p>Soy tu asistente virtual del Puerto de Valencia. Puedo ayudarte con:</p>
-      <ul class="capabilities-list">
-        <li>📅 Consultar cuándo trabajas</li>
-        <li>📊 Ver tus jornales y salarios</li>
-        <li>🎯 Saber tu posición en el censo</li>
-        <li>🚢 Ver dónde trabajas hoy</li>
-        <li>🔗 Abrir formularios y enlaces</li>
-      </ul>
-      <p class="tip">💡 Prueba a preguntarme: <strong>"¿Cuándo voy a trabajar?"</strong></p>
+      <div class="welcome-header">
+        <div class="port-image">
+          <!-- Imagen del puerto de Valencia -->
+          <img src="https://images.unsplash.com/photo-1494412685616-a5d310fbb07d?w=800&q=80" alt="Puerto de Valencia" />
+        </div>
+        <div class="welcome-overlay">
+          <div class="welcome-icon">⚓</div>
+          <h2>¡Hola, <span id="user-name">trabajador</span>!</h2>
+          <p class="subtitle">Asistente IA del Puerto de Valencia</p>
+        </div>
+      </div>
+      <div class="welcome-content">
+        <p>Soy tu asistente virtual. Puedo ayudarte con:</p>
+        <ul class="capabilities-list">
+          <li>📅 Consultar cuándo trabajas</li>
+          <li>📊 Ver tus jornales y salarios</li>
+          <li>🎯 Saber tu posición en el censo</li>
+          <li>🚢 Ver dónde trabajas hoy</li>
+          <li>💰 Jornal más alto, salario anual...</li>
+          <li>🔗 Abrir formularios (punto, no disponible)</li>
+        </ul>
+        <p class="tip">💡 Prueba a preguntarme: <strong>"¿Cuándo voy a trabajar?"</strong></p>
+      </div>
     </div>
 
     <!-- Messages will be inserted here -->

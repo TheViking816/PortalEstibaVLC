@@ -432,7 +432,6 @@ class AIEngine {
    */
   async handleOraculoQuery() {
     try {
-      // Obtener predicción del Oráculo (simular por ahora)
       const chapa = localStorage.getItem('currentChapa');
 
       if (!chapa) {
@@ -443,7 +442,40 @@ class AIEngine {
         };
       }
 
-      // Guardar acción pendiente para cuando el usuario confirme
+      // Obtener posición actual y puertas
+      const posicion = await this.dataBridge.getPosicionUsuario();
+      const puertas = await this.dataBridge.getPuertas();
+
+      if (!posicion) {
+        return {
+          text: "No pude obtener tu posición en el censo.",
+          intent: 'consultar_oraculo',
+          confidence: 0.9
+        };
+      }
+
+      // Crear respuesta informativa
+      let respuesta = `📊 **Tu situación actual:**\n\n`;
+      respuesta += `🎯 Posición en censo: **${posicion.posicion}**\n`;
+
+      if (posicion.posicionesLaborable) {
+        respuesta += `📍 A **${posicion.posicionesLaborable}** posiciones de la puerta laborable\n`;
+      }
+
+      if (posicion.posicionesFestiva) {
+        respuesta += `🎪 A **${posicion.posicionesFestiva}** posiciones de la puerta festiva\n`;
+      }
+
+      if (puertas && puertas.length > 0) {
+        respuesta += `\n🚪 **Puertas de hoy:**\n`;
+        for (const puerta of puertas) {
+          respuesta += `  • ${puerta.jornada}: SP=${puerta.sp}, OC=${puerta.oc}\n`;
+        }
+      }
+
+      respuesta += `\n💡 Para ver la predicción completa y probabilidades, puedo abrirte el Oráculo completo. ¿Lo abro?`;
+
+      // Guardar acción pendiente
       const pendingAction = {
         type: 'navigate_pwa',
         page: 'calculadora'
@@ -451,9 +483,16 @@ class AIEngine {
       localStorage.setItem('pending_action', JSON.stringify(pendingAction));
 
       return {
-        text: "Para ver tu predicción de entrada, necesitas consultar el Oráculo en la PWA principal. ¿Te abro el Oráculo?",
+        text: respuesta,
         intent: 'consultar_oraculo',
-        confidence: 0.9
+        confidence: 0.9,
+        data: {
+          type: 'oraculo',
+          posicion: posicion.posicion,
+          posicionesLaborable: posicion.posicionesLaborable,
+          posicionesFestiva: posicion.posicionesFestiva,
+          puertas: puertas
+        }
       };
 
     } catch (error) {
