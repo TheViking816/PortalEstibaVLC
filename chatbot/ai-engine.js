@@ -141,6 +141,26 @@ class AIEngine {
         ],
         response: 'ayuda',
         confidence: 0.9
+      },
+
+      // RESPUESTAS AFIRMATIVAS
+      'afirmativo': {
+        patterns: [
+          /^sí$/i,
+          /^si$/i,
+          /^vale$/i,
+          /^ok$/i,
+          /^okay$/i,
+          /^claro$/i,
+          /^adelante$/i,
+          /^perfecto$/i,
+          /^de acuerdo$/i,
+          /^por supuesto$/i,
+          /^venga$/i,
+          /^dale$/i
+        ],
+        response: 'confirmar_accion',
+        confidence: 0.95
       }
     };
 
@@ -271,6 +291,29 @@ class AIEngine {
       };
     }
 
+    if (intent.action === 'confirmar_accion') {
+      // Si el usuario dice "sí", ejecutar la última acción pendiente
+      const lastAction = localStorage.getItem('pending_action');
+
+      if (lastAction) {
+        const action = JSON.parse(lastAction);
+        localStorage.removeItem('pending_action'); // Limpiar
+
+        return {
+          text: "¡Perfecto! Abriendo...",
+          intent: intent.name,
+          confidence: intent.confidence,
+          action: action
+        };
+      } else {
+        return {
+          text: "¡Vale! ¿En qué más puedo ayudarte?",
+          intent: intent.name,
+          confidence: intent.confidence
+        };
+      }
+    }
+
     // Consultas que requieren datos
     if (intent.action === 'consultar_oraculo') {
       return await this.handleOraculoQuery();
@@ -345,15 +388,17 @@ class AIEngine {
         };
       }
 
-      // Aquí se llamaría a la lógica del Oráculo de la PWA principal
+      // Guardar acción pendiente para cuando el usuario confirme
+      const pendingAction = {
+        type: 'navigate_pwa',
+        page: 'calculadora'
+      };
+      localStorage.setItem('pending_action', JSON.stringify(pendingAction));
+
       return {
         text: "Para ver tu predicción de entrada, necesitas consultar el Oráculo en la PWA principal. ¿Te abro el Oráculo?",
         intent: 'consultar_oraculo',
-        confidence: 0.9,
-        action: {
-          type: 'navigate_pwa',
-          page: 'calculadora'
-        }
+        confidence: 0.9
       };
 
     } catch (error) {
@@ -538,9 +583,85 @@ class AIEngine {
    * Genera respuesta usando Groq API (gratuita)
    */
   async generateGroqResponse(intent, userMessage) {
-    // TODO: Implementar cuando se configure Groq
-    console.warn('⚠️ Groq no configurado aún, usando modo local');
-    return await this.generateLocalResponse(intent, userMessage);
+    if (!this.apiKey) {
+      console.warn('⚠️ Groq API key no configurada, usando modo local');
+      return await this.generateLocalResponse(intent, userMessage);
+    }
+
+    try {
+      console.log('🤖 Usando Groq API para responder');
+
+      // Construir contexto basado en la intención detectada
+      let systemPrompt = `Eres un asistente virtual para trabajadores del Puerto de Valencia.
+Respondes de forma amigable, concisa y clara en español.
+Puedes consultar datos de jornales, posición en censo, salarios y contrataciones.`;
+
+      let userPrompt = userMessage;
+
+      // Si tenemos datos de la intención, añadirlos al contexto
+      if (intent.action === 'consultar_jornales') {
+        const jornales = await this.dataBridge.getJornalesQuincena();
+        if (jornales) {
+          systemPrompt += `\n\nDatos disponibles: El usuario tiene ${jornales.total} jornales en ${jornales.quincena}.`;
+        }
+      } else if (intent.action === 'consultar_posicion') {
+        const posicion = await this.dataBridge.getPosicionUsuario();
+        if (posicion) {
+          systemPrompt += `\n\nDatos disponibles: El usuario está en la posición ${posicion.posicion} del censo.`;
+          if (posicion.posicionesLaborable) {
+            systemPrompt += ` Está a ${posicion.posicionesLaborable} posiciones de la puerta laborable.`;
+          }
+        }
+      } else if (intent.action === 'consultar_salario') {
+        const salario = await this.dataBridge.getSalarioQuincena();
+        if (salario) {
+          systemPrompt += `\n\nDatos disponibles: El usuario lleva ganado aproximadamente ${salario.bruto}€ brutos (${salario.neto}€ netos) en ${salario.quincena}.`;
+        }
+      } else if (intent.action === 'consultar_contratacion') {
+        const contratacion = await this.dataBridge.getContratacionHoy();
+        if (contratacion) {
+          systemPrompt += `\n\nDatos disponibles: Hoy trabaja en ${contratacion.empresa} como ${contratacion.puesto}, jornada ${contratacion.jornada}.`;
+        }
+      }
+
+      // Llamar a Groq API
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'llama-3.1-8b-instant', // Modelo rápido y gratuito
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          temperature: 0.7,
+          max_tokens: 500
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Groq API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const aiResponse = data.choices[0].message.content;
+
+      console.log('✅ Respuesta de Groq:', aiResponse);
+
+      return {
+        text: aiResponse,
+        intent: intent.name,
+        confidence: intent.confidence
+      };
+
+    } catch (error) {
+      console.error('❌ Error con Groq API:', error);
+      console.warn('⏳ Fallback a modo local');
+      return await this.generateLocalResponse(intent, userMessage);
+    }
   }
 
   /**

@@ -92,6 +92,7 @@ class PWADataBridge {
 
       // Calcular rango de fechas de la quincena actual
       const hoy = new Date();
+      console.log('🕐 Fecha actual del sistema:', hoy.toISOString(), 'Año:', hoy.getFullYear());
       const dia = hoy.getDate();
 
       let fechaInicio, fechaFin;

@@ -107,6 +107,12 @@ class ChatApp {
     // Inicializar motor de IA
     await this.aiEngine.initialize(this.dataBridge);
 
+    // Configurar Groq API (API key del usuario)
+    const groqApiKey = 'gsk_APS-HrNRlUEJNq7ATxqDqZglEdD1Rm1P4Hz4';
+    this.aiEngine.setApiKey(groqApiKey);
+    this.aiEngine.setMode('groq');
+    console.log('✅ Groq API configurada en modo:', this.aiEngine.mode);
+
     // Cargar configuración
     this.voiceHandler.loadSettings();
     this.loadSettings();
