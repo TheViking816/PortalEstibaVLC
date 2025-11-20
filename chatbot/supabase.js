@@ -2172,6 +2172,7 @@ const SheetsAPI = {
   getContrataciones: getContrataciones,
 
   // Jornales
+  getJornales: getJornales, // Función directa para obtener jornales con filtros
   getJornalesHistoricoAcumulado: async function(chapa) {
     // Obtener TODOS los jornales del usuario para mostrar agrupados por quincena
     const jornales = await getJornales(chapa, null, null, null);
@@ -2263,10 +2264,6 @@ const SheetsAPI = {
 if (typeof window !== 'undefined') {
   window.SheetsAPI = SheetsAPI;
   console.log('✅ SheetsAPI exportado globalmente');
-
-  // Disparar evento personalizado para avisar que está listo
-  window.dispatchEvent(new CustomEvent('SheetsAPIReady', { detail: { SheetsAPI } }));
-  console.log('📢 Evento SheetsAPIReady disparado');
 }
 
 // Auto-inicializar Supabase cuando se carga el DOM
