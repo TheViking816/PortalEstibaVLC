@@ -44,6 +44,18 @@ class PWADataBridge {
   }
 
   /**
+   * Cambia la chapa del usuario (para testing)
+   */
+  cambiarChapa(nuevaChapa) {
+    this.currentChapa = nuevaChapa.toString().trim();
+    localStorage.setItem('currentChapa', this.currentChapa);
+    console.log('✅ Chapa cambiada a:', this.currentChapa);
+
+    // Recargar la página para aplicar cambios
+    location.reload();
+  }
+
+  /**
    * Obtiene la posición del usuario en el censo
    */
   async getPosicionUsuario() {

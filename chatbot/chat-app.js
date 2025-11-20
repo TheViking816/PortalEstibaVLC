@@ -107,11 +107,12 @@ class ChatApp {
     // Inicializar motor de IA
     await this.aiEngine.initialize(this.dataBridge);
 
-    // Configurar Groq API (API key del usuario)
-    const groqApiKey = 'gsk_APS-HrNRlUEJNq7ATxqDqZglEdD1Rm1P4Hz4';
-    this.aiEngine.setApiKey(groqApiKey);
-    this.aiEngine.setMode('groq');
-    console.log('✅ Groq API configurada en modo:', this.aiEngine.mode);
+    // Configurar modo LOCAL por ahora (Groq API da error 401)
+    // TODO: Verificar formato correcto de API key de Groq
+    // const groqApiKey = 'gsk_APS-HrNRlUEJNq7ATxqDqZglEdD1Rm1P4Hz4';
+    // this.aiEngine.setApiKey(groqApiKey);
+    this.aiEngine.setMode('local');
+    console.log('✅ Motor IA configurado en modo:', this.aiEngine.mode);
 
     // Cargar configuración
     this.voiceHandler.loadSettings();
@@ -132,6 +133,24 @@ class ChatApp {
     }, 3000);
 
     console.log('✅ Chat App inicializado');
+
+    // Exponer funciones de debugging globalmente
+    window.chatDebug = {
+      cambiarChapa: (chapa) => this.dataBridge.cambiarChapa(chapa),
+      verChapa: () => {
+        console.log('Chapa actual:', this.dataBridge.currentChapa);
+        return this.dataBridge.currentChapa;
+      },
+      resetChapa: () => {
+        localStorage.removeItem('currentChapa');
+        console.log('✅ Chapa eliminada. Recarga la página para introducir una nueva.');
+      }
+    };
+
+    console.log('💡 Funciones de debug disponibles:');
+    console.log('  - chatDebug.cambiarChapa(816)  // Cambiar a chapa 816');
+    console.log('  - chatDebug.verChapa()          // Ver chapa actual');
+    console.log('  - chatDebug.resetChapa()        // Borrar chapa y empezar de nuevo');
   }
 
   /**
@@ -473,8 +492,20 @@ class ChatApp {
     }
 
     if (action.type === 'navigate_pwa') {
-      // TODO: Navegar a página de PWA principal
       console.log('Navegar a:', action.page);
+
+      // Determinar la URL de la PWA principal (puerto 8081)
+      let targetUrl = 'http://localhost:8081/';
+
+      if (action.page === 'calculadora') {
+        targetUrl = 'http://localhost:8081/index.html#oraculo';
+      } else if (action.page === 'jornales') {
+        targetUrl = 'http://localhost:8081/index.html#jornales';
+      } else if (action.page === 'sueldometro') {
+        targetUrl = 'http://localhost:8081/index.html#sueldometro';
+      }
+
+      window.open(targetUrl, '_blank');
     }
   }
 
