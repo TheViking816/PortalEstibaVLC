@@ -244,6 +244,56 @@ body::before {
   color: var(--primary-color);
 }
 
+.examples-section {
+  text-align: left;
+  margin: 1.5rem 0;
+}
+
+.examples-section h4 {
+  font-size: 0.9rem;
+  color: var(--primary-color);
+  margin: 1rem 0 0.5rem 0;
+  font-weight: 600;
+}
+
+.examples-list {
+  list-style: none;
+  padding-left: 0;
+  margin: 0 0 0.5rem 0;
+}
+
+.examples-list li {
+  padding: 0.4rem 0.8rem;
+  margin: 0.3rem 0;
+  background: var(--surface-alt);
+  border-radius: 8px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  border-left: 3px solid var(--primary-color);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.examples-list li:hover {
+  background: #e0f2fe;
+  transform: translateX(4px);
+}
+
+.tip-new {
+  background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+  padding: 0.875rem 1rem;
+  border-radius: 10px;
+  margin-top: 1.25rem;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  text-align: center;
+  border: 1px solid #fed7aa;
+}
+
+.tip-new strong {
+  color: var(--accent-color);
+}
+
 /* =============================================================================
    MESSAGES
    ============================================================================= */

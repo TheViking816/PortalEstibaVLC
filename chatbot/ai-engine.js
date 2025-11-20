@@ -308,22 +308,15 @@ class AIEngine {
     const intent = this.detectIntent(cleanMessage);
     console.log('🎯 Intención detectada:', intent);
 
-    // Generar respuesta según el modo
-    if (this.mode === 'local') {
-      return await this.generateLocalResponse(intent, userMessage);
-    } else if (this.mode === 'groq') {
-      return await this.generateGroqResponse(intent, userMessage);
-    } else if (this.mode === 'xai') {
-      return await this.generateXAIResponse(intent, userMessage);
-    } else if (this.mode === 'openai') {
-      return await this.generateOpenAIResponse(intent, userMessage);
+    // SIEMPRE generar respuesta local primero (con datos reales)
+    const localResponse = await this.generateLocalResponse(intent, userMessage);
+
+    // Si estamos en modo Groq y hay datos, mejorar la redacción
+    if (this.mode === 'groq' && this.apiKey && localResponse.data) {
+      return await this.enhanceWithGroq(localResponse, userMessage);
     }
 
-    return {
-      text: this.responses.no_entiendo,
-      intent: 'unknown',
-      confidence: 0
-    };
+    return localResponse;
   }
 
   /**
@@ -909,6 +902,62 @@ class AIEngine {
         intent: 'prima_maxima',
         confidence: 0.9
       };
+    }
+  }
+
+  /**
+   * Mejora una respuesta local con Groq (sin inventar datos)
+   */
+  async enhanceWithGroq(localResponse, userMessage) {
+    try {
+      console.log('✨ Mejorando respuesta con Groq...');
+
+      const systemPrompt = `Eres un asistente virtual del Puerto de Valencia.
+Tu trabajo es reformular la respuesta de forma más amigable y natural, pero NUNCA inventar datos.
+Usa EXACTAMENTE los datos proporcionados, solo mejora la redacción.`;
+
+      const userPrompt = `El usuario preguntó: "${userMessage}"
+
+Los datos REALES son:
+${localResponse.text}
+
+Reformula esta respuesta de forma amigable pero SIN cambiar ningún dato numérico.`;
+
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'llama-3.1-8b-instant',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          temperature: 0.3, // Baja temperatura para menos creatividad
+          max_tokens: 300
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Groq API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const enhancedText = data.choices[0].message.content;
+
+      console.log('✅ Respuesta mejorada con Groq');
+
+      return {
+        ...localResponse,
+        text: enhancedText
+      };
+
+    } catch (error) {
+      console.error('❌ Error mejorando con Groq:', error);
+      // Si falla, devolver respuesta local original
+      return localResponse;
     }
   }
 

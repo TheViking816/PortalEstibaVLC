@@ -107,10 +107,17 @@ class ChatApp {
     // Inicializar motor de IA
     await this.aiEngine.initialize(this.dataBridge);
 
-    // SIEMPRE usar modo LOCAL para tener acceso a datos reales
-    // Groq causa problemas porque no tiene acceso directo a Supabase
-    this.aiEngine.setMode('local');
-    console.log('✅ Modo LOCAL con datos reales de Supabase');
+    // Configurar Groq API para mejorar las respuestas
+    const groqApiKey = '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';
+
+    if (groqApiKey) {
+      this.aiEngine.setApiKey(groqApiKey);
+      this.aiEngine.setMode('groq');
+      console.log('✅ Modo GROQ habilitado (mejora respuestas con datos reales)');
+    } else {
+      this.aiEngine.setMode('local');
+      console.log('✅ Modo LOCAL con datos reales de Supabase');
+    }
 
     // Cargar configuración
     this.voiceHandler.loadSettings();
@@ -195,6 +202,16 @@ class ChatApp {
       chip.addEventListener('click', () => {
         const action = chip.dataset.action;
         this.handleQuickAction(action);
+      });
+    });
+
+    // Examples clickables
+    const examplesList = document.querySelectorAll('.examples-list li');
+    examplesList.forEach(example => {
+      example.addEventListener('click', () => {
+        const text = example.textContent.replace(/["]/g, '');
+        this.elements.messageInput.value = text;
+        this.sendMessage();
       });
     });
 
