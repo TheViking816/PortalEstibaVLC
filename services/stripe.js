@@ -27,8 +27,13 @@ export async function redirectToCheckout(chapa) {
   try {
     const stripeInstance = initStripe();
 
+    // URL del backend (Vercel)
+    const BACKEND_URL = 'https://portalestiba-push-backend.vercel.app';
+
+    console.log('🔄 Creando sesión de checkout para chapa:', chapa);
+
     // Crear sesión de checkout en backend
-    const response = await fetch('/api/create-checkout-session', {
+    const response = await fetch(`${BACKEND_URL}/api/create-checkout-session`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -39,11 +44,18 @@ export async function redirectToCheckout(chapa) {
       }),
     });
 
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Backend error: ${response.status} - ${errorText}`);
+    }
+
     const session = await response.json();
 
     if (session.error) {
       throw new Error(session.error);
     }
+
+    console.log('✅ Sesión creada:', session.sessionId);
 
     // Redirigir a Stripe Checkout
     const result = await stripeInstance.redirectToCheckout({
@@ -56,7 +68,7 @@ export async function redirectToCheckout(chapa) {
 
   } catch (error) {
     console.error('❌ Error en checkout:', error);
-    alert('Error al procesar el pago. Por favor, intenta de nuevo.');
+    alert(`Error al procesar el pago: ${error.message}\n\nPor favor, intenta de nuevo.`);
   }
 }
 
