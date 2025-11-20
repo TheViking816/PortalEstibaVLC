@@ -230,6 +230,47 @@ class PWADataBridge {
   }
 
   /**
+   * Obtiene todos los jornales del año actual
+   */
+  async getJornalesAnuales() {
+    try {
+      if (!this.currentChapa) {
+        throw new Error('No hay usuario logueado');
+      }
+
+      if (!window.SheetsAPI || typeof window.SheetsAPI.getJornales !== 'function') {
+        throw new Error('SheetsAPI no está disponible');
+      }
+
+      const hoy = new Date();
+      const añoActual = hoy.getFullYear();
+
+      const fechaInicio = new Date(añoActual, 0, 1); // 1 de enero
+      const fechaFin = hoy; // Hasta hoy
+
+      const fechaInicioISO = this.formatDateToISO(fechaInicio);
+      const fechaFinISO = this.formatDateToISO(fechaFin);
+
+      console.log('📅 Obteniendo jornales anuales:', { chapa: this.currentChapa, desde: fechaInicioISO, hasta: fechaFinISO });
+
+      const jornales = await window.SheetsAPI.getJornales(
+        this.currentChapa,
+        fechaInicioISO,
+        fechaFinISO,
+        null
+      );
+
+      console.log('✅ Jornales anuales obtenidos:', jornales.length);
+
+      return jornales;
+
+    } catch (error) {
+      console.error('❌ Error obteniendo jornales anuales:', error);
+      return null;
+    }
+  }
+
+  /**
    * Obtiene las puertas del día
    */
   async getPuertas() {

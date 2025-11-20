@@ -107,12 +107,11 @@ class ChatApp {
     // Inicializar motor de IA
     await this.aiEngine.initialize(this.dataBridge);
 
-    // Configurar modo LOCAL por ahora (Groq API da error 401)
-    // TODO: Verificar formato correcto de API key de Groq
-    // const groqApiKey = 'gsk_APS-HrNRlUEJNq7ATxqDqZglEdD1Rm1P4Hz4';
-    // this.aiEngine.setApiKey(groqApiKey);
-    this.aiEngine.setMode('local');
-    console.log('✅ Motor IA configurado en modo:', this.aiEngine.mode);
+    // Configurar xAI (Grok) API
+    const xaiApiKey = 'xai-P1Orrc3QPYydaUfa1OobT4RQELO9Nd4Y1YBwHzwvfLyB6oNeRRSkPVZoDQoGaz6S7JDiMwMi4nRgweNH';
+    this.aiEngine.setApiKey(xaiApiKey);
+    this.aiEngine.setMode('xai');
+    console.log('✅ xAI (Grok) configurado en modo:', this.aiEngine.mode);
 
     // Cargar configuración
     this.voiceHandler.loadSettings();
@@ -124,13 +123,8 @@ class ChatApp {
     // Mostrar nombre del usuario
     await this.displayUserName();
 
-    // Ocultar welcome card después de 3 segundos
-    setTimeout(() => {
-      const welcomeCard = document.querySelector('.welcome-card');
-      if (welcomeCard) {
-        welcomeCard.style.display = 'none';
-      }
-    }, 3000);
+    // NO ocultar welcome card automáticamente
+    // El usuario puede scrollear hacia abajo si quiere
 
     console.log('✅ Chat App inicializado');
 

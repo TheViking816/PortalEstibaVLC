@@ -10,7 +10,7 @@
 
 class AIEngine {
   constructor() {
-    this.mode = 'local'; // 'local', 'groq', 'openai'
+    this.mode = 'local'; // 'local', 'groq', 'openai', 'xai'
     this.apiKey = null;
     this.dataBridge = null; // Se inyectará desde chat-app.js
 
@@ -70,6 +70,42 @@ class AIEngine {
         confidence: 0.9
       },
 
+      // SALARIO ANUAL
+      'salario_anual': {
+        patterns: [
+          /cuánto (llevo|he) ganado (este|el) año/i,
+          /total (del )?año/i,
+          /ganancia anual/i,
+          /salario anual/i
+        ],
+        response: 'consultar_salario_anual',
+        confidence: 0.9
+      },
+
+      // JORNAL MÁS ALTO
+      'jornal_maximo': {
+        patterns: [
+          /(cuál|cual) (es|fue) (el|mi) jornal más alto/i,
+          /jornal (más|mas) alto/i,
+          /mejor jornal/i,
+          /máximo jornal/i
+        ],
+        response: 'consultar_jornal_maximo',
+        confidence: 0.9
+      },
+
+      // PRIMA MÁS ALTA
+      'prima_maxima': {
+        patterns: [
+          /(cuál|cual) (es|fue) (la|mi) prima más alta/i,
+          /prima (más|mas) alta/i,
+          /mejor prima/i,
+          /máxima prima/i
+        ],
+        response: 'consultar_prima_maxima',
+        confidence: 0.9
+      },
+
       // DÓNDE TRABAJO HOY
       'donde_trabajo': {
         patterns: [
@@ -98,9 +134,12 @@ class AIEngine {
       'no_disponible': {
         patterns: [
           /poner(me)? no disponible/i,
-          /(abrir?|abreme) (el )?formulario (de )?no disponibilidad/i,
-          /no puedo trabajar/i,
-          /reportar ausencia/i
+          /(abrir?|abreme|abre) (el )?formulario (de )?no disponibilidad/i,
+          /no (puedo|voy a) trabajar/i,
+          /reportar ausencia/i,
+          /no disponible/i,
+          /(quiero|voy a) poner(me)? no disponible/i,
+          /ponme no disponible/i
         ],
         response: 'abrir_no_disponible',
         confidence: 0.85
@@ -110,8 +149,10 @@ class AIEngine {
       'punto': {
         patterns: [
           /poner(me)? (el )?punto/i,
-          /(abrir?|abreme) punto (y )?h\.?s\.?/i,
-          /marcar punto/i
+          /(abrir?|abreme|abre) (el )?punto (y )?h\.?s\.?/i,
+          /marcar (el )?punto/i,
+          /(quiero|voy a) poner(me)? (el )?punto/i,
+          /ponme (el )?punto/i
         ],
         response: 'abrir_punto',
         confidence: 0.85
@@ -234,6 +275,8 @@ class AIEngine {
       return await this.generateLocalResponse(intent, userMessage);
     } else if (this.mode === 'groq') {
       return await this.generateGroqResponse(intent, userMessage);
+    } else if (this.mode === 'xai') {
+      return await this.generateXAIResponse(intent, userMessage);
     } else if (this.mode === 'openai') {
       return await this.generateOpenAIResponse(intent, userMessage);
     }
@@ -329,6 +372,18 @@ class AIEngine {
 
     if (intent.action === 'consultar_salario') {
       return await this.handleSalarioQuery();
+    }
+
+    if (intent.action === 'consultar_salario_anual') {
+      return await this.handleSalarioAnualQuery();
+    }
+
+    if (intent.action === 'consultar_jornal_maximo') {
+      return await this.handleJornalMaximoQuery();
+    }
+
+    if (intent.action === 'consultar_prima_maxima') {
+      return await this.handlePrimaMaximaQuery();
     }
 
     if (intent.action === 'consultar_contratacion') {
@@ -579,6 +634,123 @@ class AIEngine {
     }
   }
 
+  async handleSalarioAnualQuery() {
+    try {
+      const jornales = await this.dataBridge.getJornalesAnuales();
+
+      if (!jornales || jornales.length === 0) {
+        return {
+          text: "No encontré jornales registrados este año.",
+          intent: 'salario_anual',
+          confidence: 0.9
+        };
+      }
+
+      // Estimación simple: 150€ brutos por jornal
+      const estimacionBruto = jornales.length * 150;
+      const estimacionNeto = Math.round(estimacionBruto * 0.85);
+
+      return {
+        text: `Este año llevas **${jornales.length} jornales** trabajados.\n\nGanancias estimadas: **${estimacionBruto}€ brutos** (${estimacionNeto}€ netos).`,
+        intent: 'salario_anual',
+        confidence: 0.9,
+        data: {
+          type: 'salario_anual',
+          jornales: jornales.length,
+          bruto: estimacionBruto,
+          neto: estimacionNeto
+        }
+      };
+
+    } catch (error) {
+      console.error('Error en handleSalarioAnualQuery:', error);
+      return {
+        text: this.responses.error_datos,
+        intent: 'salario_anual',
+        confidence: 0.9
+      };
+    }
+  }
+
+  async handleJornalMaximoQuery() {
+    try {
+      const jornales = await this.dataBridge.getJornalesQuincena();
+
+      if (!jornales || jornales.total === 0) {
+        return {
+          text: "No encontré jornales en esta quincena.",
+          intent: 'jornal_maximo',
+          confidence: 0.9
+        };
+      }
+
+      // Analizar jornales para encontrar el más alto
+      let maxJornal = null;
+      let maxValor = 0;
+
+      for (const jornal of jornales.jornales) {
+        // Estimación: jornada completa = 150€, media = 75€
+        let valor = jornal.jornada === 'COMPLETA' ? 150 : 75;
+
+        if (valor > maxValor) {
+          maxValor = valor;
+          maxJornal = jornal;
+        }
+      }
+
+      if (!maxJornal) {
+        return {
+          text: "No pude determinar el jornal más alto.",
+          intent: 'jornal_maximo',
+          confidence: 0.9
+        };
+      }
+
+      return {
+        text: `Tu jornal más alto esta quincena fue de aproximadamente **${maxValor}€**\n\nEmpresa: ${maxJornal.empresa}\nPuesto: ${maxJornal.puesto}\nJornada: ${maxJornal.jornada}`,
+        intent: 'jornal_maximo',
+        confidence: 0.9
+      };
+
+    } catch (error) {
+      console.error('Error en handleJornalMaximoQuery:', error);
+      return {
+        text: this.responses.error_datos,
+        intent: 'jornal_maximo',
+        confidence: 0.9
+      };
+    }
+  }
+
+  async handlePrimaMaximaQuery() {
+    try {
+      const jornales = await this.dataBridge.getJornalesQuincena();
+
+      if (!jornales || jornales.total === 0) {
+        return {
+          text: "No encontré jornales con primas en esta quincena.",
+          intent: 'prima_maxima',
+          confidence: 0.9
+        };
+      }
+
+      // Por ahora, respuesta genérica ya que no tenemos datos de primas
+      return {
+        text: "Esta funcionalidad requiere datos de primas que aún no están disponibles en el sistema. Contacta con el administrador para más información.",
+        intent: 'prima_maxima',
+        confidence: 0.9
+      };
+
+    } catch (error) {
+      console.error('Error en handlePrimaMaximaQuery:', error);
+      return {
+        text: this.responses.error_datos,
+        intent: 'prima_maxima',
+        confidence: 0.9
+      };
+    }
+  }
+
   /**
    * Genera respuesta usando Groq API (gratuita)
    */
@@ -659,6 +831,92 @@ Puedes consultar datos de jornales, posición en censo, salarios y contratacione
 
     } catch (error) {
       console.error('❌ Error con Groq API:', error);
+      console.warn('⏳ Fallback a modo local');
+      return await this.generateLocalResponse(intent, userMessage);
+    }
+  }
+
+  /**
+   * Genera respuesta usando xAI (Grok)
+   */
+  async generateXAIResponse(intent, userMessage) {
+    if (!this.apiKey) {
+      console.warn('⚠️ xAI API key no configurada, usando modo local');
+      return await this.generateLocalResponse(intent, userMessage);
+    }
+
+    try {
+      console.log('🤖 Usando xAI (Grok) para responder');
+
+      // Construir contexto basado en la intención detectada
+      let systemPrompt = `Eres un asistente virtual para trabajadores del Puerto de Valencia.
+Respondes de forma amigable, concisa y clara en español.
+Puedes consultar datos de jornales, posición en censo, salarios y contrataciones.
+Tu nombre es "Asistente IA del Puerto de Valencia".`;
+
+      let userPrompt = userMessage;
+
+      // Si tenemos datos de la intención, añadirlos al contexto
+      if (intent.action === 'consultar_jornales') {
+        const jornales = await this.dataBridge.getJornalesQuincena();
+        if (jornales) {
+          systemPrompt += `\n\nDatos disponibles: El usuario tiene ${jornales.total} jornales en ${jornales.quincena}.`;
+        }
+      } else if (intent.action === 'consultar_posicion') {
+        const posicion = await this.dataBridge.getPosicionUsuario();
+        if (posicion) {
+          systemPrompt += `\n\nDatos disponibles: El usuario está en la posición ${posicion.posicion} del censo.`;
+          if (posicion.posicionesLaborable) {
+            systemPrompt += ` Está a ${posicion.posicionesLaborable} posiciones de la puerta laborable.`;
+          }
+        }
+      } else if (intent.action === 'consultar_salario') {
+        const salario = await this.dataBridge.getSalarioQuincena();
+        if (salario) {
+          systemPrompt += `\n\nDatos disponibles: El usuario lleva ganado aproximadamente ${salario.bruto}€ brutos (${salario.neto}€ netos) en ${salario.quincena}.`;
+        }
+      } else if (intent.action === 'consultar_contratacion') {
+        const contratacion = await this.dataBridge.getContratacionHoy();
+        if (contratacion) {
+          systemPrompt += `\n\nDatos disponibles: Hoy trabaja en ${contratacion.empresa} como ${contratacion.puesto}, jornada ${contratacion.jornada}.`;
+        }
+      }
+
+      // Llamar a xAI API (compatible con OpenAI)
+      const response = await fetch('https://api.x.ai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'grok-beta',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          temperature: 0.7,
+          max_tokens: 500
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`xAI API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const aiResponse = data.choices[0].message.content;
+
+      console.log('✅ Respuesta de xAI (Grok):', aiResponse);
+
+      return {
+        text: aiResponse,
+        intent: intent.name,
+        confidence: intent.confidence
+      };
+
+    } catch (error) {
+      console.error('❌ Error con xAI API:', error);
       console.warn('⏳ Fallback a modo local');
       return await this.generateLocalResponse(intent, userMessage);
     }
