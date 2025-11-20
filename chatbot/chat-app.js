@@ -203,10 +203,32 @@ class ChatApp {
     this.showLoading(true);
 
     try {
+      // Verificar que el motor de IA está listo
+      if (!this.aiEngine) {
+        throw new Error('Motor de IA no inicializado');
+      }
+
+      // Verificar que el puente de datos está listo
+      if (!this.dataBridge || !this.dataBridge.currentChapa) {
+        this.showLoading(false);
+        this.showMessage('bot', 'Por favor, introduce tu chapa para continuar.');
+        this.isProcessing = false;
+        return;
+      }
+
       // Procesar con IA
+      console.log('🤖 Procesando mensaje con IA:', text);
       const response = await this.aiEngine.processMessage(text);
 
+      console.log('📥 Respuesta de IA:', response);
+
       this.showLoading(false);
+
+      // Verificar que hay respuesta
+      if (!response || !response.text) {
+        this.showMessage('bot', 'Lo siento, no pude generar una respuesta.');
+        return;
+      }
 
       // Mostrar respuesta
       this.showMessage('bot', response.text, response.data);
@@ -224,7 +246,7 @@ class ChatApp {
     } catch (error) {
       console.error('❌ Error procesando mensaje:', error);
       this.showLoading(false);
-      this.showMessage('bot', 'Lo siento, ocurrió un error al procesar tu mensaje.');
+      this.showMessage('bot', `Lo siento, ocurrió un error: ${error.message}`);
     } finally {
       this.isProcessing = false;
     }

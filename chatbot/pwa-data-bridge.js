@@ -23,9 +23,20 @@ class PWADataBridge {
     // Obtener chapa del usuario actual
     this.currentChapa = localStorage.getItem('currentChapa');
 
+    // Si no hay chapa en localStorage, pedir al usuario que la introduzca
     if (!this.currentChapa) {
       console.warn('⚠️ No hay usuario logueado');
-      return false;
+
+      // Mostrar prompt para introducir chapa manualmente
+      const chapa = prompt('Introduce tu número de chapa para usar el asistente:');
+
+      if (chapa) {
+        this.currentChapa = chapa.trim();
+        localStorage.setItem('currentChapa', this.currentChapa);
+        console.log('✅ Chapa guardada:', this.currentChapa);
+      } else {
+        return false;
+      }
     }
 
     console.log('✅ PWA Data Bridge inicializado para chapa:', this.currentChapa);

@@ -9,7 +9,8 @@
       "Bash(powershell -ExecutionPolicy Bypass -File fix_oraculo.ps1)",
       "Bash(powershell:*)",
       "Bash(git checkout:*)",
-      "Bash(xxd:*)"
+      "Bash(xxd:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []
