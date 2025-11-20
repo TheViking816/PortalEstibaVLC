@@ -164,18 +164,20 @@
   <!-- Supabase Library -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-  <!-- Data Bridge (acceso a datos PWA) -->
+  <!-- Data Layer (debe cargarse ANTES de todo) -->
   <script src="./supabase.js"></script>
-  <script src="./pwa-data-bridge.js"></script>
 
   <!-- Voice Handler -->
-  <script src="voice-handler.js"></script>
+  <script src="./voice-handler.js"></script>
+
+  <!-- Data Bridge (acceso a datos PWA) -->
+  <script src="./pwa-data-bridge.js"></script>
 
   <!-- AI Engine -->
-  <script src="ai-engine.js"></script>
+  <script src="./ai-engine.js"></script>
 
-  <!-- Main Chat App -->
-  <script src="chat-app.js"></script>
+  <!-- Main Chat App (último, coordina todo) -->
+  <script src="./chat-app.js"></script>
 
   <!-- PWA Service Worker -->
   <script>

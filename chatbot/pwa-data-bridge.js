@@ -52,13 +52,17 @@ class PWADataBridge {
         throw new Error('No hay usuario logueado');
       }
 
-      // Obtener posición usando SheetsAPI
-      if (!window.SheetsAPI) {
-        throw new Error('SheetsAPI no disponible');
+      // Verificar que SheetsAPI está disponible
+      if (!window.SheetsAPI || typeof window.SheetsAPI.getPosicionChapa !== 'function') {
+        throw new Error('SheetsAPI no está disponible');
       }
+
+      console.log('📍 Obteniendo posición para chapa:', this.currentChapa);
 
       const posicion = await window.SheetsAPI.getPosicionChapa(this.currentChapa);
       const posicionesHasta = await window.SheetsAPI.getPosicionesHastaContratacion(this.currentChapa);
+
+      console.log('✅ Posición obtenida:', { posicion, posicionesHasta });
 
       return {
         posicion: posicion,
@@ -81,6 +85,11 @@ class PWADataBridge {
         throw new Error('No hay usuario logueado');
       }
 
+      // Verificar que SheetsAPI está disponible
+      if (!window.SheetsAPI || typeof window.SheetsAPI.getJornales !== 'function') {
+        throw new Error('SheetsAPI no está disponible');
+      }
+
       // Calcular rango de fechas de la quincena actual
       const hoy = new Date();
       const dia = hoy.getDate();
@@ -101,6 +110,8 @@ class PWADataBridge {
       const fechaInicioISO = this.formatDateToISO(fechaInicio);
       const fechaFinISO = this.formatDateToISO(fechaFin);
 
+      console.log('📅 Obteniendo jornales:', { chapa: this.currentChapa, desde: fechaInicioISO, hasta: fechaFinISO });
+
       // Obtener jornales
       const jornales = await window.SheetsAPI.getJornales(
         this.currentChapa,
@@ -108,6 +119,8 @@ class PWADataBridge {
         fechaFinISO,
         null
       );
+
+      console.log('✅ Jornales obtenidos:', jornales.length);
 
       return {
         total: jornales.length,
@@ -163,7 +176,14 @@ class PWADataBridge {
         throw new Error('No hay usuario logueado');
       }
 
+      // Verificar que SheetsAPI está disponible
+      if (!window.SheetsAPI || typeof window.SheetsAPI.getJornales !== 'function') {
+        throw new Error('SheetsAPI no está disponible');
+      }
+
       const hoy = this.formatDateToISO(new Date());
+
+      console.log('🚢 Obteniendo contratación de hoy:', hoy);
 
       // Obtener jornales de hoy
       const jornales = await window.SheetsAPI.getJornales(
@@ -172,6 +192,8 @@ class PWADataBridge {
         hoy,
         null
       );
+
+      console.log('✅ Jornales de hoy:', jornales?.length || 0);
 
       if (!jornales || jornales.length === 0) {
         return null;

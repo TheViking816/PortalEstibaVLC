@@ -27,6 +27,26 @@ class ChatApp {
   }
 
   /**
+   * Espera a que SheetsAPI esté disponible
+   */
+  async waitForSheetsAPI(maxAttempts = 10) {
+    console.log('⏳ Esperando a que SheetsAPI esté disponible...');
+
+    for (let i = 0; i < maxAttempts; i++) {
+      if (window.SheetsAPI && typeof window.SheetsAPI.getJornales === 'function') {
+        console.log('✅ SheetsAPI está disponible');
+        return true;
+      }
+
+      console.log(`⏳ Intento ${i + 1}/${maxAttempts} - SheetsAPI no disponible, esperando...`);
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    console.error('❌ SheetsAPI no se cargó después de esperar');
+    return false;
+  }
+
+  /**
    * Inicializa la aplicación
    */
   async initialize() {
@@ -34,6 +54,14 @@ class ChatApp {
 
     // Obtener elementos DOM
     this.cacheDOM();
+
+    // Esperar a que SheetsAPI esté disponible
+    const sheetsAPIReady = await this.waitForSheetsAPI();
+
+    if (!sheetsAPIReady) {
+      this.showMessage('bot', 'Error: No se pudo cargar el sistema de datos. Por favor, recarga la página.');
+      return;
+    }
 
     // Inicializar componentes
     this.aiEngine = new AIEngine();
@@ -44,7 +72,7 @@ class ChatApp {
     const dataReady = await this.dataBridge.initialize();
 
     if (!dataReady) {
-      this.showMessage('bot', 'Para usar el asistente, debes iniciar sesión en la PWA principal primero.');
+      this.showMessage('bot', 'Para usar el asistente, introduce tu número de chapa.');
       return;
     }
 
