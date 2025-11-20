@@ -5564,6 +5564,92 @@ window.updateStepper = function(inputId, change) {
   }
 };
 
+// Funcion para cargar datos automaticamente desde Noray
+window.cargarDatosNoray = async function() {
+  var btnCargar = document.getElementById('btn-cargar-noray');
+  var statusDiv = document.getElementById('noray-status');
+
+  if (btnCargar) {
+    btnCargar.disabled = true;
+    btnCargar.innerHTML = '<span class="loading-spinner"></span> Cargando...';
+  }
+
+  try {
+    var url = 'https://script.google.com/macros/s/AKfycbyv6swXpt80WOfTyRhm0n4IBGqcxqeBZCxR1x8bwrhGBRz34I7zZjBzlaJ8lXgHcbDS/exec?action=all';
+
+    var response = await fetch(url);
+    var data = await response.json();
+
+    if (data.success) {
+      // Rellenar fijos
+      if (data.fijos !== undefined) {
+        var fijosInput = document.getElementById('calc-fijos');
+        if (fijosInput) {
+          fijosInput.value = data.fijos;
+        }
+      }
+
+      // Rellenar gruas y coches por jornada
+      if (data.demandas) {
+        // Jornada 1: 08-14
+        var gruas1 = document.getElementById('calc-gruas-1');
+        var coches1 = document.getElementById('calc-coches-1');
+        if (gruas1 && data.demandas['08-14']) {
+          gruas1.value = data.demandas['08-14'].gruas || 0;
+        }
+        if (coches1 && data.demandas['08-14']) {
+          coches1.value = data.demandas['08-14'].coches || 0;
+        }
+
+        // Jornada 2: 14-20
+        var gruas2 = document.getElementById('calc-gruas-2');
+        var coches2 = document.getElementById('calc-coches-2');
+        if (gruas2 && data.demandas['14-20']) {
+          gruas2.value = data.demandas['14-20'].gruas || 0;
+        }
+        if (coches2 && data.demandas['14-20']) {
+          coches2.value = data.demandas['14-20'].coches || 0;
+        }
+
+        // Jornada 3: 20-02
+        var gruas3 = document.getElementById('calc-gruas-3');
+        var coches3 = document.getElementById('calc-coches-3');
+        if (gruas3 && data.demandas['20-02']) {
+          gruas3.value = data.demandas['20-02'].gruas || 0;
+        }
+        if (coches3 && data.demandas['20-02']) {
+          coches3.value = data.demandas['20-02'].coches || 0;
+        }
+      }
+
+      // Mostrar estado
+      if (statusDiv) {
+        var fecha = new Date(data.timestamp);
+        var horaStr = fecha.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+        statusDiv.innerHTML = '<span style="color: #10b981;">Datos cargados ' + horaStr + '</span>';
+        statusDiv.style.display = 'block';
+      }
+
+      console.log('Datos Noray cargados:', data);
+
+    } else {
+      throw new Error(data.error || 'Error desconocido');
+    }
+
+  } catch (error) {
+    console.error('Error cargando datos de Noray:', error);
+    if (statusDiv) {
+      statusDiv.innerHTML = '<span style="color: #ef4444;">Error al cargar datos</span>';
+      statusDiv.style.display = 'block';
+    }
+  } finally {
+    if (btnCargar) {
+      btnCargar.disabled = false;
+      btnCargar.innerHTML = 'Cargar datos Noray';
+    }
+  }
+};
+
 function calcularResultadoJornada(posicionRestante) {
   // posicionRestante: cuantas posiciones faltan para llegar al usuario
   // Si es <= 0, el usuario ya esta dentro (sale contratado)
