@@ -3539,27 +3539,44 @@ body::before {
   user-select: none;
 }
 
-.feature-lock-overlay {
-  position: absolute;
+.feature-locked::before {
+  content: '';
+  position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  min-height: 500px;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 9999;
+  pointer-events: all;
+}
+
+.feature-lock-overlay {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 90%;
+  max-width: 500px;
+  height: auto;
+  max-height: 80vh;
   background: rgba(255, 255, 255, 0.97);
   backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 10000;
   border-radius: 12px;
   pointer-events: all;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  padding: 2rem;
 }
 
 .feature-lock-content {
   text-align: center;
-  padding: 2rem;
+  padding: 0;
   max-width: 400px;
+  width: 100%;
 }
 
 .feature-lock-icon {

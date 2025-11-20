@@ -11,11 +11,16 @@ let stripe = null;
  */
 export function initStripe() {
   if (!stripe) {
-    const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY ||
-      'pk_test_51SVcFZFApc6nOGEvWGRDRJAIrDNCfbpyTCmDyEX7eVRE5YvwJdYOZUDIBi5sy7bPPRnSOCLl1HTV3loZyOEKtkED00Tfnaqegl';
+    // Hardcoded porque import.meta.env no funciona sin bundler
+    const publishableKey = 'pk_test_51SVcFZFApc6nOGEvWGRDRJAIrDNCfbpyTCmDyEX7eVRE5YvwJdYOZUDIBi5sy7bPPRnSOCLl1HTV3loZyOEKtkED00Tfnaqegl';
 
-    stripe = Stripe(publishableKey);
-    console.log('✅ Stripe inicializado');
+    if (!window.Stripe) {
+      console.error('❌ Stripe SDK no cargado. Asegúrate de incluir <script src="https://js.stripe.com/v3/"></script>');
+      throw new Error('Stripe SDK no disponible');
+    }
+
+    stripe = window.Stripe(publishableKey);
+    console.log('✅ Stripe inicializado con key:', publishableKey.substring(0, 20) + '...');
   }
   return stripe;
 }
