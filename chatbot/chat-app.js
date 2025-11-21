@@ -24,6 +24,20 @@ class ChatApp {
     };
 
     this.isProcessing = false;
+
+    // Imágenes de fondo del puerto
+    this.backgroundImages = [
+      'https://i.imgur.com/93PeVLa.jpeg',
+      'https://i.imgur.com/zHHigVR.jpeg',
+      'https://i.imgur.com/oky6atz.jpeg',
+      'https://i.imgur.com/rnfRKl8.jpeg',
+      'https://i.imgur.com/lp1Uvc7.jpeg',
+      'https://i.imgur.com/1vBGGnt.jpeg',
+      'https://i.imgur.com/C7zDfuC.jpeg',
+      'https://i.imgur.com/pZDIoGP.jpeg',
+      'https://i.imgur.com/A3plzCX.jpeg'
+    ];
+    this.currentBgIndex = 0;
   }
 
   /**
@@ -133,6 +147,9 @@ class ChatApp {
 
     // NO ocultar welcome card automáticamente
     // El usuario puede scrollear hacia abajo si quiere
+
+    // Iniciar rotación de fondos
+    this.startBackgroundRotation();
 
     console.log('✅ Chat App inicializado');
 
@@ -567,8 +584,8 @@ class ChatApp {
       // Usar rutas relativas para mantener la sesión
       let targetUrl = '../index.html';
 
-      if (action.page === 'calculadora') {
-        targetUrl = '../index.html#oraculo';
+      if (action.page === 'calculadora' || action.page === 'oraculo') {
+        targetUrl = '../index.html#calculadora';
       } else if (action.page === 'jornales') {
         targetUrl = '../index.html#jornales';
       } else if (action.page === 'sueldometro') {
@@ -680,7 +697,33 @@ class ChatApp {
     const aiMode = localStorage.getItem('ai_mode');
     if (aiMode) {
       document.getElementById('ai-mode-select').value = aiMode;
+
+      // Mostrar/ocultar sección de API key según el modo
+      const apiKeySection = document.getElementById('api-key-section');
+      apiKeySection.style.display = (aiMode === 'groq' || aiMode === 'openai') ? 'block' : 'none';
     }
+
+    // API key
+    const apiKey = localStorage.getItem('ai_api_key');
+    if (apiKey) {
+      document.getElementById('api-key-input').value = apiKey;
+    }
+  }
+
+  /**
+   * Inicia la rotación automática de imágenes de fondo
+   */
+  startBackgroundRotation() {
+    // Cambiar imagen cada 30 segundos
+    setInterval(() => {
+      this.currentBgIndex = (this.currentBgIndex + 1) % this.backgroundImages.length;
+      const newImage = this.backgroundImages[this.currentBgIndex];
+      document.documentElement.style.setProperty('--bg-image', `url('${newImage}')`);
+      console.log(`🖼️ Cambiando fondo a imagen ${this.currentBgIndex + 1}/${this.backgroundImages.length}`);
+    }, 30000);
+
+    // Aplicar la primera imagen inmediatamente
+    document.documentElement.style.setProperty('--bg-image', `url('${this.backgroundImages[0]}')`);
   }
 }
 

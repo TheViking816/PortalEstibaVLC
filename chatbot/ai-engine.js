@@ -292,6 +292,41 @@ class AIEngine {
         confidence: 0.9
       },
 
+      // EMPRESA MÁS TRABAJADA
+      'empresa_mas_trabajada': {
+        patterns: [
+          /(en )?(qué|que) empresa (he )?trabajado (más|mas)( esta quincena| la quincena| este año| el año pasado)?/i,
+          /(cuál|cual) (es|fue) la empresa (donde|que) (más|mas) (he )?trabajado/i,
+          /empresa (donde|que) (más|mas) (he )?trabajado/i,
+          /(en )?(dónde|donde) (he )?trabajado (más|mas)/i
+        ],
+        response: 'consultar_empresa_mas_trabajada',
+        confidence: 0.9
+      },
+
+      // JORNADA MÁS TRABAJADA
+      'jornada_mas_trabajada': {
+        patterns: [
+          /(en )?(qué|que) (jornada|horario|turno) (he )?trabajado (más|mas)( esta quincena| la quincena| este año| el año pasado)?/i,
+          /(cuál|cual) (es|fue) la jornada (donde|que) (más|mas) (he )?trabajado/i,
+          /jornada (donde|que) (más|mas) (he )?trabajado/i,
+          /(qué|que) (horario|turno) (he hecho|hago) (más|mas)/i
+        ],
+        response: 'consultar_jornada_mas_trabajada',
+        confidence: 0.9
+      },
+
+      // DÍA CON MAYOR PRIMA
+      'dia_mayor_prima': {
+        patterns: [
+          /(qué|que) día (hice|tuve) (la )?(mayor|más alta|mejor) prima/i,
+          /(cuándo|cuando) (hice|tuve) (la )?(mayor|más alta|mejor) prima/i,
+          /día (con |de )(la )?(mayor|más alta|mejor) prima/i
+        ],
+        response: 'consultar_dia_mayor_prima',
+        confidence: 0.9
+      },
+
       // SEGUIMIENTO / MÁS INFORMACIÓN
       'seguimiento': {
         patterns: [
@@ -406,6 +441,11 @@ class AIEngine {
     // Guardar el intent y datos para próximas consultas
     this.lastIntent = intent;
     this.lastData = localResponse.data;
+
+    // Si estamos en modo OpenAI y hay datos, mejorar la redacción
+    if (this.mode === 'openai' && this.apiKey && localResponse.data) {
+      return await this.generateOpenAIResponse(intent, userMessage);
+    }
 
     // Si estamos en modo Groq y hay datos, mejorar la redacción
     if (this.mode === 'groq' && this.apiKey && localResponse.data) {
@@ -589,6 +629,18 @@ class AIEngine {
 
     if (intent.action === 'consultar_puertas') {
       return await this.handlePuertasQuery();
+    }
+
+    if (intent.action === 'consultar_empresa_mas_trabajada') {
+      return await this.handleEmpresaMasTrabajadaQuery(userMessage);
+    }
+
+    if (intent.action === 'consultar_jornada_mas_trabajada') {
+      return await this.handleJornadaMasTrabajadaQuery(userMessage);
+    }
+
+    if (intent.action === 'consultar_dia_mayor_prima') {
+      return await this.handleDiaMayorPrimaQuery(userMessage);
     }
 
     // Acciones
@@ -1349,6 +1401,151 @@ class AIEngine {
     }
   }
 
+  async handleEmpresaMasTrabajadaQuery(userMessage) {
+    try {
+      // Detectar periodo en el mensaje
+      let periodo = 'quincena';
+      if (/mes pasado|mes anterior/i.test(userMessage)) {
+        periodo = 'mes-pasado';
+      } else if (/este año|anual/i.test(userMessage)) {
+        periodo = 'anual';
+      }
+
+      const empresaData = await this.dataBridge.getEmpresaMasTrabajada(periodo);
+
+      if (!empresaData) {
+        const periodoTexto = periodo === 'quincena' ? 'esta quincena' :
+                            periodo === 'mes-pasado' ? 'el mes pasado' : 'este año';
+        return {
+          text: `No encontré jornales en ${periodoTexto}.`,
+          intent: 'empresa_mas_trabajada',
+          confidence: 0.9
+        };
+      }
+
+      const periodoTexto = periodo === 'quincena' ? 'esta quincena' :
+                          periodo === 'mes-pasado' ? 'el mes pasado' : 'este año';
+
+      let respuesta = `🏢 **La empresa donde más has trabajado ${periodoTexto}**: **${empresaData.empresa}**\n\n`;
+      respuesta += `📊 **Jornales en esta empresa**: ${empresaData.jornales} de ${empresaData.totalJornales} (${empresaData.porcentaje}%)\n`;
+
+      return {
+        text: respuesta,
+        intent: 'empresa_mas_trabajada',
+        confidence: 0.9,
+        data: {
+          type: 'empresa_mas_trabajada',
+          empresa: empresaData
+        }
+      };
+
+    } catch (error) {
+      console.error('Error en handleEmpresaMasTrabajadaQuery:', error);
+      return {
+        text: this.responses.error_datos,
+        intent: 'empresa_mas_trabajada',
+        confidence: 0.9
+      };
+    }
+  }
+
+  async handleJornadaMasTrabajadaQuery(userMessage) {
+    try {
+      // Detectar periodo en el mensaje
+      let periodo = 'quincena';
+      if (/mes pasado|mes anterior/i.test(userMessage)) {
+        periodo = 'mes-pasado';
+      } else if (/este año|anual/i.test(userMessage)) {
+        periodo = 'anual';
+      }
+
+      const jornadaData = await this.dataBridge.getJornadaMasTrabajada(periodo);
+
+      if (!jornadaData) {
+        const periodoTexto = periodo === 'quincena' ? 'esta quincena' :
+                            periodo === 'mes-pasado' ? 'el mes pasado' : 'este año';
+        return {
+          text: `No encontré jornales en ${periodoTexto}.`,
+          intent: 'jornada_mas_trabajada',
+          confidence: 0.9
+        };
+      }
+
+      const periodoTexto = periodo === 'quincena' ? 'esta quincena' :
+                          periodo === 'mes-pasado' ? 'el mes pasado' : 'este año';
+
+      let respuesta = `🕐 **La jornada donde más has trabajado ${periodoTexto}**: **${jornadaData.jornada}**\n\n`;
+      respuesta += `📊 **Jornales en esta jornada**: ${jornadaData.jornales} de ${jornadaData.totalJornales} (${jornadaData.porcentaje}%)\n`;
+
+      return {
+        text: respuesta,
+        intent: 'jornada_mas_trabajada',
+        confidence: 0.9,
+        data: {
+          type: 'jornada_mas_trabajada',
+          jornada: jornadaData
+        }
+      };
+
+    } catch (error) {
+      console.error('Error en handleJornadaMasTrabajadaQuery:', error);
+      return {
+        text: this.responses.error_datos,
+        intent: 'jornada_mas_trabajada',
+        confidence: 0.9
+      };
+    }
+  }
+
+  async handleDiaMayorPrimaQuery(userMessage) {
+    try {
+      // Detectar periodo en el mensaje
+      let periodo = 'quincena';
+      if (/mes pasado|mes anterior/i.test(userMessage)) {
+        periodo = 'mes-pasado';
+      }
+
+      const primaData = await this.dataBridge.getDiaMayorPrima(periodo);
+
+      if (!primaData) {
+        const periodoTexto = periodo === 'quincena' ? 'esta quincena' : 'el mes pasado';
+        return {
+          text: `No encontré primas personalizadas en ${periodoTexto}.`,
+          intent: 'dia_mayor_prima',
+          confidence: 0.9
+        };
+      }
+
+      const periodoTexto = periodo === 'quincena' ? 'esta quincena' : 'el mes pasado';
+
+      let respuesta = `💎 **El día con mayor prima ${periodoTexto}**: **${primaData.prima_personalizada}€**\n\n`;
+      respuesta += `📅 **Fecha**: ${primaData.fecha}\n`;
+      respuesta += `🕐 **Jornada**: ${primaData.jornada}\n`;
+
+      if (primaData.movimientos_personalizados > 0) {
+        respuesta += `📦 **Movimientos**: ${primaData.movimientos_personalizados}\n`;
+      }
+
+      return {
+        text: respuesta,
+        intent: 'dia_mayor_prima',
+        confidence: 0.9,
+        data: {
+          type: 'dia_mayor_prima',
+          prima: primaData
+        }
+      };
+
+    } catch (error) {
+      console.error('Error en handleDiaMayorPrimaQuery:', error);
+      return {
+        text: this.responses.error_datos,
+        intent: 'dia_mayor_prima',
+        confidence: 0.9
+      };
+    }
+  }
+
   /**
    * Mejora una respuesta local con Groq (sin inventar datos)
    */
@@ -1577,12 +1774,74 @@ Tu nombre es "Asistente IA del Puerto de Valencia".`;
   }
 
   /**
-   * Genera respuesta usando OpenAI GPT
+   * Genera respuesta usando OpenAI GPT-4
    */
   async generateOpenAIResponse(intent, userMessage) {
-    // TODO: Implementar cuando se configure OpenAI
-    console.warn('⚠️ OpenAI no configurado aún, usando modo local');
-    return await this.generateLocalResponse(intent, userMessage);
+    if (!this.apiKey) {
+      console.warn('⚠️ OpenAI API key no configurada, usando modo local');
+      return await this.generateLocalResponse(intent, userMessage);
+    }
+
+    try {
+      console.log('🤖 Usando OpenAI GPT-4 para responder');
+
+      // SIEMPRE obtener datos reales primero
+      const localResponse = await this.generateLocalResponse(intent, userMessage);
+
+      // Si hay datos, usar GPT-4 para mejorar la redacción
+      if (localResponse.data) {
+        const systemPrompt = `Eres un asistente virtual del Puerto de Valencia.
+Tu trabajo es reformular respuestas de forma amigable y natural, pero NUNCA inventar datos.
+Usa EXACTAMENTE los datos proporcionados, solo mejora la redacción y hazla más conversacional.
+Mantén el formato markdown para negrita (**texto**) y emojis.`;
+
+        const userPrompt = `El usuario preguntó: "${userMessage}"
+
+Los datos REALES son:
+${localResponse.text}
+
+Reformula esta respuesta de forma amigable, conversacional y natural, pero SIN cambiar ningún dato numérico ni información factual.`;
+
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${this.apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: 'gpt-4o-mini', // Modelo más económico pero potente
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt }
+            ],
+            temperature: 0.3,
+            max_tokens: 500
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`OpenAI API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const enhancedText = data.choices[0].message.content;
+
+        console.log('✅ Respuesta mejorada con OpenAI GPT-4');
+
+        return {
+          ...localResponse,
+          text: enhancedText
+        };
+      }
+
+      // Si no hay datos (saludos, ayuda, etc), usar respuesta local
+      return localResponse;
+
+    } catch (error) {
+      console.error('❌ Error con OpenAI API:', error);
+      console.warn('⏳ Fallback a modo local');
+      return await this.generateLocalResponse(intent, userMessage);
+    }
   }
 
   /**

@@ -1001,6 +1001,122 @@ class PWADataBridge {
       return 'LABORABLE';
     }
   }
+
+  /**
+   * Obtiene la empresa donde más ha trabajado en un periodo
+   */
+  async getEmpresaMasTrabajada(periodo = 'quincena') {
+    try {
+      if (!this.currentChapa) return null;
+
+      let jornalesData;
+      if (periodo === 'mes-pasado') {
+        jornalesData = await this.getJornalesMesPasado();
+      } else if (periodo === 'anual') {
+        jornalesData = await this.getJornalesAnuales();
+      } else {
+        jornalesData = await this.getJornalesQuincena();
+      }
+
+      if (!jornalesData || !jornalesData.jornales || jornalesData.total === 0) {
+        return null;
+      }
+
+      // Contar jornales por empresa
+      const empresasCount = {};
+      for (const jornal of jornalesData.jornales) {
+        const empresa = jornal.empresa || 'Sin especificar';
+        empresasCount[empresa] = (empresasCount[empresa] || 0) + 1;
+      }
+
+      // Encontrar la empresa con más jornales
+      let empresaMasTrabajada = null;
+      let maxJornales = 0;
+      for (const [empresa, count] of Object.entries(empresasCount)) {
+        if (count > maxJornales) {
+          maxJornales = count;
+          empresaMasTrabajada = empresa;
+        }
+      }
+
+      return {
+        empresa: empresaMasTrabajada,
+        jornales: maxJornales,
+        totalJornales: jornalesData.total,
+        porcentaje: ((maxJornales / jornalesData.total) * 100).toFixed(1)
+      };
+
+    } catch (error) {
+      console.error('Error en getEmpresaMasTrabajada:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Obtiene la jornada donde más ha trabajado en un periodo
+   */
+  async getJornadaMasTrabajada(periodo = 'quincena') {
+    try {
+      if (!this.currentChapa) return null;
+
+      let jornalesData;
+      if (periodo === 'mes-pasado') {
+        jornalesData = await this.getJornalesMesPasado();
+      } else if (periodo === 'anual') {
+        jornalesData = await this.getJornalesAnuales();
+      } else {
+        jornalesData = await this.getJornalesQuincena();
+      }
+
+      if (!jornalesData || !jornalesData.jornales || jornalesData.total === 0) {
+        return null;
+      }
+
+      // Contar jornales por jornada
+      const jornadasCount = {};
+      for (const jornal of jornalesData.jornales) {
+        const jornada = jornal.jornada || 'Sin especificar';
+        jornadasCount[jornada] = (jornadasCount[jornada] || 0) + 1;
+      }
+
+      // Encontrar la jornada con más jornales
+      let jornadaMasTrabajada = null;
+      let maxJornales = 0;
+      for (const [jornada, count] of Object.entries(jornadasCount)) {
+        if (count > maxJornales) {
+          maxJornales = count;
+          jornadaMasTrabajada = jornada;
+        }
+      }
+
+      return {
+        jornada: jornadaMasTrabajada,
+        jornales: maxJornales,
+        totalJornales: jornalesData.total,
+        porcentaje: ((maxJornales / jornalesData.total) * 100).toFixed(1)
+      };
+
+    } catch (error) {
+      console.error('Error en getJornadaMasTrabajada:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Obtiene el día con mayor prima en un periodo
+   */
+  async getDiaMayorPrima(periodo = 'quincena') {
+    try {
+      if (!this.currentChapa) return null;
+
+      // Reutilizar la función getPrimaMasAlta que ya existe
+      return await this.getPrimaMasAlta(periodo);
+
+    } catch (error) {
+      console.error('Error en getDiaMayorPrima:', error);
+      return null;
+    }
+  }
 }
 
 // Exportar

@@ -160,7 +160,7 @@
       <div class="modal-body">
         <div class="setting-item">
           <label>
-            <input type="checkbox" id="voice-response-toggle" checked>
+            <input type="checkbox" id="voice-response-toggle">
             <span>Respuestas por voz</span>
           </label>
         </div>
@@ -176,15 +176,23 @@
             <select id="ai-mode-select">
               <option value="local" selected>Local (Gratuito)</option>
               <option value="groq">Groq (Gratuito, online)</option>
-              <option value="openai" disabled>OpenAI GPT (Requiere API key)</option>
+              <option value="openai">OpenAI GPT-4 (Premium, $5-20/mes)</option>
             </select>
           </label>
+          <p style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem;">
+            💡 <strong>Local</strong>: Pattern matching simple, 100% gratuito<br>
+            🤖 <strong>Groq</strong>: Gratuito pero puede inventar datos<br>
+            ✨ <strong>OpenAI GPT-4</strong>: Inteligencia avanzada, contextual, sin inventar datos
+          </p>
         </div>
         <div class="setting-item" id="api-key-section" style="display: none;">
           <label>
-            <span>API Key</span>
+            <span>OpenAI API Key</span>
             <input type="password" id="api-key-input" placeholder="sk-...">
           </label>
+          <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem;">
+            Obtén tu API key en <a href="https://platform.openai.com/api-keys" target="_blank" style="color: var(--primary-color);">platform.openai.com</a>
+          </p>
           <button id="save-api-key" class="btn-primary">Guardar</button>
         </div>
       </div>

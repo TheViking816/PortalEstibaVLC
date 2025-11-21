@@ -12,7 +12,7 @@ class VoiceHandler {
 
     // Web Speech API - Síntesis de voz
     this.synthesis = window.speechSynthesis;
-    this.voiceEnabled = true;
+    this.voiceEnabled = false; // Desactivado por defecto
 
     // Configuración
     this.lang = 'es-ES';
