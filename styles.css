@@ -3539,6 +3539,12 @@ body::before {
   user-select: none;
 }
 
+/* Ocultar todo el contenido dentro del contenedor bloqueado */
+.feature-locked > *:not(.feature-lock-overlay) {
+  opacity: 0 !important;
+  visibility: hidden !important;
+}
+
 .feature-locked::before {
   content: '';
   position: fixed;
@@ -3632,4 +3638,139 @@ body::before {
   margin-top: 1.5rem !important;
   line-height: 1.8;
   text-align: left;
+}
+
+/* ========================================================================
+   BOTÓN FLOTANTE DEL CHATBOT IA (FAB - Floating Action Button)
+   ======================================================================== */
+
+.chatbot-fab {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 64px;
+  height: 64px;
+  background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
+  border-radius: 50%;
+  display: none; /* Oculto por defecto */
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    0 4px 12px rgba(14, 165, 233, 0.3),
+    0 2px 6px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 9999;
+  text-decoration: none;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Mostrar solo cuando el usuario está autenticado */
+body.authenticated .chatbot-fab {
+  display: flex;
+  animation: chatbot-fab-intro 0.5s ease-out 0.5s backwards, chatbot-fab-pulse 3s ease-in-out 2s infinite;
+}
+
+.chatbot-fab svg {
+  width: 32px;
+  height: 32px;
+  stroke: white;
+  stroke-width: 2.5;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.15));
+}
+
+.chatbot-fab:hover {
+  transform: scale(1.1) rotate(5deg);
+  box-shadow:
+    0 6px 20px rgba(14, 165, 233, 0.4),
+    0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.chatbot-fab:active {
+  transform: scale(0.95);
+}
+
+/* Badge con efecto sparkle */
+.chatbot-fab-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 24px;
+  height: 24px;
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 8px rgba(251, 191, 36, 0.5);
+  animation: chatbot-badge-rotate 20s linear infinite;
+}
+
+/* Animaciones */
+@keyframes chatbot-fab-intro {
+  0% {
+    transform: scale(0) rotate(-180deg);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.2) rotate(20deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+@keyframes chatbot-fab-pulse {
+  0%, 100% {
+    box-shadow:
+      0 4px 12px rgba(14, 165, 233, 0.3),
+      0 2px 6px rgba(0, 0, 0, 0.1);
+  }
+  50% {
+    box-shadow:
+      0 4px 20px rgba(14, 165, 233, 0.5),
+      0 2px 8px rgba(0, 0, 0, 0.15),
+      0 0 0 8px rgba(14, 165, 233, 0.1);
+  }
+}
+
+@keyframes chatbot-badge-rotate {
+  0%, 100% {
+    transform: rotate(0deg) scale(1);
+  }
+  25% {
+    transform: rotate(90deg) scale(1.1);
+  }
+  50% {
+    transform: rotate(180deg) scale(1);
+  }
+  75% {
+    transform: rotate(270deg) scale(1.1);
+  }
+}
+
+/* Responsive: Ajustar posición en móvil */
+@media (max-width: 768px) {
+  /* IMPORTANTE: Mantener display en responsive */
+  body.authenticated .chatbot-fab {
+    display: flex; /* Asegurar que se muestra en móvil */
+    bottom: 80px; /* Subir para no tapar el nav inferior */
+    right: 16px;
+    width: 56px;
+    height: 56px;
+  }
+
+  .chatbot-fab svg {
+    width: 28px;
+    height: 28px;
+  }
+
+  .chatbot-fab-badge {
+    width: 20px;
+    height: 20px;
+    font-size: 12px;
+  }
 }

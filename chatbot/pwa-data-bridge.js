@@ -20,50 +20,43 @@ class PWADataBridge {
       this.supabase = window.supabase;
     }
 
-    // Verificar si ya está autenticado
-    const savedAuth = localStorage.getItem('chatbot_auth');
+    // PRIORIDAD 1: Intentar leer auth de la PWA principal (SIEMPRE primero)
+    const pwaChapa = localStorage.getItem('currentChapa');
 
-    if (savedAuth) {
-      const auth = JSON.parse(savedAuth);
-      this.currentChapa = auth.chapa;
-      console.log('✅ Usuario ya autenticado:', this.currentChapa);
+    if (pwaChapa) {
+      this.currentChapa = pwaChapa;
+      console.log('✅ Autenticación heredada de PWA principal:', this.currentChapa);
+
+      // Guardar también en chatbot_auth para futuras sesiones
+      localStorage.setItem('chatbot_auth', JSON.stringify({
+        chapa: this.currentChapa,
+        timestamp: Date.now()
+      }));
+
       return true;
     }
 
-    // Si no hay auth, pedir credenciales
-    console.warn('⚠️ No hay usuario autenticado');
+    // PRIORIDAD 2: Si no hay auth de PWA, verificar si hay auth del chatbot guardada
+    const savedAuth = localStorage.getItem('chatbot_auth');
 
-    // Mostrar prompt para introducir chapa
-    const chapa = prompt('🔐 Introduce tu número de chapa:');
-
-    if (!chapa) {
-      return false;
+    if (savedAuth) {
+      try {
+        const auth = JSON.parse(savedAuth);
+        this.currentChapa = auth.chapa;
+        console.log('✅ Usuario ya autenticado (chatbot):', this.currentChapa);
+        return true;
+      } catch (error) {
+        console.error('❌ Error al parsear chatbot_auth:', error);
+        localStorage.removeItem('chatbot_auth');
+      }
     }
 
-    // Mostrar prompt para introducir contraseña
-    const password = prompt('🔑 Introduce tu contraseña:');
+    // PRIORIDAD 3: Si no hay ninguna auth, NO pedir credenciales automáticamente
+    // El usuario debe venir desde el PWA, no acceder directamente al chatbot
+    console.warn('⚠️ No hay usuario autenticado. Debes abrir el chatbot desde el PWA principal.');
 
-    if (!password) {
-      return false;
-    }
-
-    // Verificar credenciales en Supabase
-    const isValid = await this.verificarCredenciales(chapa.trim(), password.trim());
-
-    if (!isValid) {
-      alert('❌ Chapa o contraseña incorrecta');
-      return false;
-    }
-
-    // Guardar autenticación
-    this.currentChapa = chapa.trim();
-    localStorage.setItem('chatbot_auth', JSON.stringify({
-      chapa: this.currentChapa,
-      timestamp: Date.now()
-    }));
-
-    console.log('✅ Usuario autenticado correctamente:', this.currentChapa);
-    return true;
+    // NO mostrar prompt automáticamente - solo mensaje de error
+    return false;
   }
 
   /**
@@ -72,7 +65,7 @@ class PWADataBridge {
   async verificarCredenciales(chapa, password) {
     try {
       if (!window.SheetsAPI || typeof window.SheetsAPI.getUsuarioPorChapa !== 'function') {
-        console.error('❌ SheetsAPI no disponible para verificación');
+        console.warn('⚠️ SheetsAPI no disponible para verificación, permitiendo acceso');
         // En modo desarrollo, permitir acceso
         return true;
       }
@@ -80,17 +73,23 @@ class PWADataBridge {
       const usuario = await window.SheetsAPI.getUsuarioPorChapa(chapa);
 
       if (!usuario) {
-        console.error('❌ Usuario no encontrado');
+        console.error('❌ Usuario no encontrado para chapa:', chapa);
         return false;
       }
 
-      // Verificar contraseña (asumiendo que hay un campo 'password' en usuario)
+      console.log('✅ Usuario encontrado en base de datos:', usuario.nombre || chapa);
+
+      // Si viene de PWA (password null), no verificar contraseña
+      if (password === null) {
+        return true;
+      }
+
+      // Si se proporciona contraseña, verificar
       if (usuario.password && usuario.password === password) {
         return true;
       }
 
-      // Si no hay campo password en Supabase, por ahora aceptar cualquier contraseña
-      // TODO: Implementar hash de contraseñas en Supabase
+      // Si no hay campo password en Supabase, aceptar
       console.warn('⚠️ Sistema de contraseñas no implementado en BD, permitiendo acceso');
       return true;
 
@@ -355,6 +354,249 @@ class PWADataBridge {
   }
 
   /**
+   * Obtiene los jornales del mes pasado
+   */
+  async getJornalesMesPasado() {
+    try {
+      if (!this.currentChapa) {
+        throw new Error('No hay usuario logueado');
+      }
+
+      if (!window.SheetsAPI || typeof window.SheetsAPI.getJornales !== 'function') {
+        throw new Error('SheetsAPI no está disponible');
+      }
+
+      const hoy = new Date();
+
+      // Calcular primer y último día del mes pasado
+      const primerDiaMesPasado = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+      const ultimoDiaMesPasado = new Date(hoy.getFullYear(), hoy.getMonth(), 0);
+
+      const fechaInicioISO = this.formatDateToISO(primerDiaMesPasado);
+      const fechaFinISO = this.formatDateToISO(ultimoDiaMesPasado);
+
+      console.log('📅 Obteniendo jornales del mes pasado:', { chapa: this.currentChapa, desde: fechaInicioISO, hasta: fechaFinISO });
+
+      const jornales = await window.SheetsAPI.getJornales(
+        this.currentChapa,
+        fechaInicioISO,
+        fechaFinISO,
+        null
+      );
+
+      console.log('✅ Jornales del mes pasado obtenidos:', jornales.length);
+
+      const nombreMes = primerDiaMesPasado.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+
+      return {
+        total: jornales.length,
+        jornales: jornales,
+        mes: nombreMes
+      };
+
+    } catch (error) {
+      console.error('❌ Error obteniendo jornales del mes pasado:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Obtiene jornales en un rango de horas específico (ej: 20-02)
+   */
+  async getJornalesPorHorario(horarioInicio, horarioFin, periodo = 'quincena') {
+    try {
+      if (!this.currentChapa) {
+        throw new Error('No hay usuario logueado');
+      }
+
+      let jornales;
+      if (periodo === 'quincena') {
+        const jornalesData = await this.getJornalesQuincena();
+        jornales = jornalesData?.jornales || [];
+      } else if (periodo === 'mes-pasado') {
+        const jornalesData = await this.getJornalesMesPasado();
+        jornales = jornalesData?.jornales || [];
+      } else if (periodo === 'anual') {
+        jornales = await this.getJornalesAnuales() || [];
+      }
+
+      if (!jornales || jornales.length === 0) {
+        return { total: 0, jornales: [] };
+      }
+
+      // Filtrar por jornada que contenga el rango horario
+      // Ejemplos: "20-02", "20 a 02", "20 02"
+      const jornadaPatterns = [
+        `${horarioInicio}-${horarioFin}`,
+        `${horarioInicio} a ${horarioFin}`,
+        `${horarioInicio} ${horarioFin}`
+      ];
+
+      const jornalesFiltrados = jornales.filter(jornal => {
+        const jornada = jornal.jornada?.toLowerCase().replace(/\s+/g, '-');
+        return jornadaPatterns.some(pattern =>
+          jornada?.includes(pattern.toLowerCase().replace(/\s+/g, '-'))
+        );
+      });
+
+      console.log(`✅ Jornales en horario ${horarioInicio}-${horarioFin}:`, jornalesFiltrados.length);
+
+      return {
+        total: jornalesFiltrados.length,
+        jornales: jornalesFiltrados
+      };
+
+    } catch (error) {
+      console.error('❌ Error obteniendo jornales por horario:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Obtiene el jornal con el salario más alto (de la quincena o mes pasado)
+   */
+  async getJornalMasAlto(periodo = 'quincena') {
+    try {
+      if (!this.currentChapa) {
+        throw new Error('No hay usuario logueado');
+      }
+
+      // Obtener tabla salarial y mapeo de puestos
+      const [mapeoPuestos, tablaSalarial] = await Promise.all([
+        window.SheetsAPI.getMapeoPuestos(),
+        window.SheetsAPI.getTablaSalarial()
+      ]);
+
+      // Obtener jornales del periodo
+      let jornalesData;
+      if (periodo === 'quincena') {
+        jornalesData = await this.getJornalesQuincena();
+      } else if (periodo === 'mes-pasado') {
+        jornalesData = await this.getJornalesMesPasado();
+      }
+
+      if (!jornalesData || jornalesData.total === 0) {
+        return null;
+      }
+
+      // Calcular salario de cada jornal
+      let jornalMax = null;
+      let salarioMax = 0;
+
+      for (const jornal of jornalesData.jornales) {
+        const puestoLower = jornal.puesto.trim().toLowerCase();
+        const mapeo = mapeoPuestos.find(m => m.puesto.trim().toLowerCase() === puestoLower);
+
+        if (!mapeo) continue;
+
+        const grupoSalarial = mapeo.grupo_salarial;
+        const jornada = jornal.jornada.replace(/\s+a\s+/g, '-').replace(/\s+/g, '');
+        const tipoDia = this.determinarTipoDia(jornal.fecha, jornada);
+        const claveJornada = `${jornada}_${tipoDia}`;
+
+        const salarioRow = tablaSalarial.find(s => s.clave_jornada === claveJornada);
+        if (!salarioRow) continue;
+
+        let salarioBase = 0;
+        if (grupoSalarial === 'Grupo 1') {
+          salarioBase = parseFloat(salarioRow.jornal_base_g1) || 0;
+        } else if (grupoSalarial === 'Grupo 2') {
+          salarioBase = parseFloat(salarioRow.jornal_base_g2) || 0;
+        }
+
+        if (puestoLower === 'trincador' || puestoLower === 'trincador de coches') {
+          salarioBase += 46.94;
+        }
+
+        let prima = 0;
+        if (mapeo.tipo_operativa === 'Coches') {
+          prima = parseFloat(salarioRow.prima_minima_coches) || 0;
+        } else if (mapeo.tipo_operativa === 'Contenedor') {
+          prima = 120 * (parseFloat(salarioRow.coef_prima_mayor120) || 0);
+        }
+
+        const total = salarioBase + prima;
+
+        if (total > salarioMax) {
+          salarioMax = total;
+          jornalMax = { ...jornal, salarioCalculado: total };
+        }
+      }
+
+      return jornalMax;
+
+    } catch (error) {
+      console.error('❌ Error obteniendo jornal más alto:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Obtiene la prima más alta (de la quincena o mes pasado)
+   */
+  async getPrimaMasAlta(periodo = 'quincena') {
+    try {
+      if (!this.currentChapa) {
+        throw new Error('No hay usuario logueado');
+      }
+
+      // Obtener rango de fechas según periodo
+      let fechaInicioISO, fechaFinISO;
+      if (periodo === 'quincena') {
+        const hoy = new Date();
+        const dia = hoy.getDate();
+        let fechaInicio, fechaFin;
+
+        if (dia <= 15) {
+          fechaInicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+          fechaFin = new Date(hoy.getFullYear(), hoy.getMonth(), 15);
+        } else {
+          fechaInicio = new Date(hoy.getFullYear(), hoy.getMonth(), 16);
+          fechaFin = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+        }
+
+        fechaInicioISO = this.formatDateToISO(fechaInicio);
+        fechaFinISO = this.formatDateToISO(fechaFin);
+      } else if (periodo === 'mes-pasado') {
+        const hoy = new Date();
+        const primerDiaMesPasado = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+        const ultimoDiaMesPasado = new Date(hoy.getFullYear(), hoy.getMonth(), 0);
+        fechaInicioISO = this.formatDateToISO(primerDiaMesPasado);
+        fechaFinISO = this.formatDateToISO(ultimoDiaMesPasado);
+      }
+
+      // Obtener primas personalizadas
+      const primasPersonalizadas = await window.SheetsAPI.getPrimasPersonalizadas(
+        this.currentChapa,
+        fechaInicioISO,
+        fechaFinISO
+      );
+
+      if (!primasPersonalizadas || primasPersonalizadas.length === 0) {
+        return null;
+      }
+
+      // Encontrar la prima más alta
+      let primaMax = null;
+      let valorMax = 0;
+
+      for (const prima of primasPersonalizadas) {
+        const valor = parseFloat(prima.prima_personalizada) || 0;
+        if (valor > valorMax) {
+          valorMax = valor;
+          primaMax = prima;
+        }
+      }
+
+      return primaMax;
+
+    } catch (error) {
+      console.error('❌ Error obteniendo prima más alta:', error);
+      return null;
+    }
+  }
+
+  /**
    * Obtiene las puertas del día
    */
   async getPuertas() {
@@ -396,6 +638,251 @@ class PWADataBridge {
   }
 
   /**
+   * Calcula el sueldo estimado de la quincena actual
+   */
+  async calcularSueldoQuincena() {
+    try {
+      if (!this.currentChapa) {
+        return null;
+      }
+
+      // Obtener jornales de la quincena
+      const jornalesData = await this.getJornalesQuincena();
+      if (!jornalesData || jornalesData.total === 0) {
+        return {
+          jornales: 0,
+          salarioBruto: 0,
+          irpf: 0,
+          salarioNeto: 0,
+          mensaje: 'No hay jornales en esta quincena'
+        };
+      }
+
+      // Obtener datos necesarios para el cálculo
+      const [mapeoPuestos, tablaSalarial] = await Promise.all([
+        window.SheetsAPI.getMapeoPuestos(),
+        window.SheetsAPI.getTablaSalarial()
+      ]);
+
+      console.log('🗂️ Tabla salarial cargada:', tablaSalarial.length, 'filas');
+      console.log('🔑 Ejemplo de clave_jornada:', tablaSalarial[0]?.clave_jornada);
+
+      // Obtener IRPF del usuario
+      let irpfPorcentaje = 15; // Default
+      try {
+        const configUsuario = await window.SheetsAPI.getUserConfig(this.currentChapa);
+        if (configUsuario && configUsuario.irpf) {
+          irpfPorcentaje = configUsuario.irpf;
+        }
+      } catch (error) {
+        console.warn('⚠️ Error cargando IRPF, usando 15%');
+      }
+
+      // Calcular salario para cada jornal
+      let salarioBrutoTotal = 0;
+      let detalleJornales = [];
+
+      for (const jornal of jornalesData.jornales) {
+        console.log('📊 Procesando jornal:', jornal);
+
+        const puestoLower = jornal.puesto.trim().toLowerCase();
+        const mapeo = mapeoPuestos.find(m => m.puesto.trim().toLowerCase() === puestoLower);
+
+        if (!mapeo) {
+          console.warn('⚠️ No se encontró mapeo para puesto:', jornal.puesto);
+          continue;
+        }
+
+        console.log('✅ Mapeo encontrado:', mapeo);
+
+        const grupoSalarial = mapeo.grupo_salarial;
+
+        // Normalizar jornada: '14 a 20' -> '14-20'
+        const jornada = jornal.jornada.replace(/\s+a\s+/g, '-').replace(/\s+/g, '');
+
+        // Determinar tipo de día (LABORABLE, SABADO, FEST-FEST)
+        const tipoDia = this.determinarTipoDia(jornal.fecha, jornada);
+
+        // Crear clave de jornada (ej: "14-20_LABORABLE")
+        const claveJornada = `${jornada}_${tipoDia}`;
+
+        console.log('🔑 Clave de jornada:', claveJornada);
+
+        // Buscar en tabla salarial
+        const salarioRow = tablaSalarial.find(s => s.clave_jornada === claveJornada);
+
+        if (!salarioRow) {
+          console.warn('⚠️ No se encontró salario para clave:', claveJornada);
+          continue;
+        }
+
+        console.log('✅ Fila de salario encontrada:', salarioRow);
+
+        // Obtener salario base según grupo
+        let salarioBase = 0;
+        if (grupoSalarial === 'Grupo 1') {
+          salarioBase = parseFloat(salarioRow.jornal_base_g1) || 0;
+        } else if (grupoSalarial === 'Grupo 2') {
+          salarioBase = parseFloat(salarioRow.jornal_base_g2) || 0;
+        }
+
+        // Añadir complemento de 46,94€ para Trincador y Trincador de Coches
+        if (puestoLower === 'trincador' || puestoLower === 'trincador de coches') {
+          salarioBase += 46.94;
+        }
+
+        // Calcular prima (por defecto 120 movimientos para Contenedor)
+        let prima = 0;
+        if (mapeo.tipo_operativa === 'Coches') {
+          prima = parseFloat(salarioRow.prima_minima_coches) || 0;
+        } else if (mapeo.tipo_operativa === 'Contenedor') {
+          // 120 movimientos por defecto con coef_prima_mayor120
+          prima = 120 * (parseFloat(salarioRow.coef_prima_mayor120) || 0);
+        }
+
+        const total = salarioBase + prima;
+        salarioBrutoTotal += total;
+
+        console.log('💰 Cálculo:', { salarioBase, prima, total });
+
+        detalleJornales.push({
+          fecha: jornal.fecha,
+          puesto: jornal.puesto,
+          jornada: jornal.jornada,
+          salarioBase,
+          prima,
+          total
+        });
+      }
+
+      console.log('💵 Salario bruto total:', salarioBrutoTotal);
+
+      const irpfImporte = (salarioBrutoTotal * irpfPorcentaje) / 100;
+      const salarioNeto = salarioBrutoTotal - irpfImporte;
+
+      return {
+        jornales: jornalesData.total,
+        quincena: jornalesData.quincena,
+        salarioBruto: salarioBrutoTotal.toFixed(2),
+        irpf: irpfImporte.toFixed(2),
+        irpfPorcentaje,
+        salarioNeto: salarioNeto.toFixed(2),
+        detalleJornales
+      };
+
+    } catch (error) {
+      console.error('❌ Error calculando sueldo:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Calcula el sueldo total del año
+   */
+  async calcularSueldoAnual() {
+    try {
+      if (!this.currentChapa) {
+        return null;
+      }
+
+      // Obtener todos los jornales del año
+      const jornales = await this.getJornalesAnuales();
+      if (!jornales || jornales.length === 0) {
+        return {
+          jornales: 0,
+          salarioBruto: 0,
+          irpf: 0,
+          salarioNeto: 0,
+          mensaje: 'No hay jornales este año'
+        };
+      }
+
+      // Obtener datos necesarios para el cálculo
+      const [mapeoPuestos, tablaSalarial] = await Promise.all([
+        window.SheetsAPI.getMapeoPuestos(),
+        window.SheetsAPI.getTablaSalarial()
+      ]);
+
+      // Obtener IRPF del usuario
+      let irpfPorcentaje = 15; // Default
+      try {
+        const configUsuario = await window.SheetsAPI.getUserConfig(this.currentChapa);
+        if (configUsuario && configUsuario.irpf) {
+          irpfPorcentaje = configUsuario.irpf;
+        }
+      } catch (error) {
+        console.warn('⚠️ Error cargando IRPF, usando 15%');
+      }
+
+      // Calcular salario para cada jornal
+      let salarioBrutoTotal = 0;
+
+      for (const jornal of jornales) {
+        const puestoLower = jornal.puesto.trim().toLowerCase();
+        const mapeo = mapeoPuestos.find(m => m.puesto.trim().toLowerCase() === puestoLower);
+
+        if (!mapeo) continue;
+
+        const grupoSalarial = mapeo.grupo_salarial;
+
+        // Normalizar jornada: '14 a 20' -> '14-20'
+        const jornada = jornal.jornada.replace(/\s+a\s+/g, '-').replace(/\s+/g, '');
+
+        // Determinar tipo de día (LABORABLE, SABADO, FESTIVO, etc.)
+        const tipoDia = this.determinarTipoDia(jornal.fecha, jornada);
+
+        // Crear clave de jornada (ej: "14-20_LABORABLE")
+        const claveJornada = `${jornada}_${tipoDia}`;
+
+        // Buscar en tabla salarial
+        const salarioRow = tablaSalarial.find(s => s.clave_jornada === claveJornada);
+
+        if (!salarioRow) continue;
+
+        // Obtener salario base según grupo
+        let salarioBase = 0;
+        if (grupoSalarial === 'Grupo 1') {
+          salarioBase = parseFloat(salarioRow.jornal_base_g1) || 0;
+        } else if (grupoSalarial === 'Grupo 2') {
+          salarioBase = parseFloat(salarioRow.jornal_base_g2) || 0;
+        }
+
+        // Añadir complemento de 46,94€ para Trincador y Trincador de Coches
+        if (puestoLower === 'trincador' || puestoLower === 'trincador de coches') {
+          salarioBase += 46.94;
+        }
+
+        // Calcular prima (por defecto 120 movimientos para Contenedor)
+        let prima = 0;
+        if (mapeo.tipo_operativa === 'Coches') {
+          prima = parseFloat(salarioRow.prima_minima_coches) || 0;
+        } else if (mapeo.tipo_operativa === 'Contenedor') {
+          // 120 movimientos por defecto con coef_prima_mayor120
+          prima = 120 * (parseFloat(salarioRow.coef_prima_mayor120) || 0);
+        }
+
+        const total = salarioBase + prima;
+        salarioBrutoTotal += total;
+      }
+
+      const irpfImporte = (salarioBrutoTotal * irpfPorcentaje) / 100;
+      const salarioNeto = salarioBrutoTotal - irpfImporte;
+
+      return {
+        jornales: jornales.length,
+        salarioBruto: salarioBrutoTotal.toFixed(2),
+        irpf: irpfImporte.toFixed(2),
+        irpfPorcentaje,
+        salarioNeto: salarioNeto.toFixed(2)
+      };
+
+    } catch (error) {
+      console.error('❌ Error calculando sueldo anual:', error);
+      return null;
+    }
+  }
+
+  /**
    * Utilidades
    */
   formatDateToISO(date) {
@@ -410,6 +897,109 @@ class PWADataBridge {
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const year = date.getFullYear();
     return `${day}/${month}/${year}`;
+  }
+
+  /**
+   * Determina el tipo de día para cálculo salarial
+   */
+  determinarTipoDia(fecha, jornada) {
+    // Parsear fecha: soportar tanto dd/mm/yyyy como yyyy-mm-dd (ISO)
+    let day, month, year;
+
+    if (fecha.includes('/')) {
+      // Formato español: dd/mm/yyyy
+      const parts = fecha.split('/');
+      day = parseInt(parts[0]);
+      month = parseInt(parts[1]) - 1;
+      year = parseInt(parts[2]);
+    } else if (fecha.includes('-')) {
+      // Formato ISO: yyyy-mm-dd
+      const parts = fecha.split('-');
+      year = parseInt(parts[0]);
+      month = parseInt(parts[1]) - 1;
+      day = parseInt(parts[2]);
+    } else {
+      // Formato desconocido
+      const date = new Date(fecha);
+      if (!isNaN(date.getTime())) {
+        year = date.getFullYear();
+        month = date.getMonth();
+        day = date.getDate();
+      } else {
+        console.error('Formato de fecha no válido:', fecha);
+        return 'LABORABLE';
+      }
+    }
+
+    const dateObj = new Date(year, month, day);
+
+    // Festivos de España 2025
+    const festivos2025 = [
+      '01/01/2025', '06/01/2025',
+      '18/04/2025', '19/04/2025',
+      '01/05/2025',
+      '15/08/2025',
+      '12/10/2025',
+      '01/11/2025',
+      '06/12/2025', '08/12/2025',
+      '25/12/2025'
+    ];
+
+    const esFestivoFecha = (d) => {
+      const fechaNorm = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+      return festivos2025.includes(fechaNorm) || d.getDay() === 0;
+    };
+
+    const dayOfWeek = dateObj.getDay();
+    const esFestivoHoy = esFestivoFecha(dateObj);
+
+    // Para jornadas nocturnas (02-08, 20-02)
+    if (jornada === '02-08' || jornada === '20-02') {
+      const diaSiguiente = new Date(dateObj);
+      diaSiguiente.setDate(diaSiguiente.getDate() + 1);
+      const esFestivoManana = esFestivoFecha(diaSiguiente);
+
+      const diaAnterior = new Date(dateObj);
+      diaAnterior.setDate(diaAnterior.getDate() - 1);
+      const esFestivoAyer = esFestivoFecha(diaAnterior);
+
+      if (jornada === '02-08') {
+        if (dayOfWeek === 6) {
+          return 'LABORABLE';
+        } else if (esFestivoAyer && esFestivoHoy) {
+          return 'FEST-FEST';
+        } else if (dayOfWeek === 0) {
+          return 'FESTIVO';
+        } else if (esFestivoHoy && !esFestivoManana) {
+          return 'FEST-LAB';
+        } else if (esFestivoManana) {
+          return 'FESTIVO';
+        } else if (esFestivoAyer && !esFestivoHoy) {
+          return 'FEST-LAB';
+        } else {
+          return 'LABORABLE';
+        }
+      } else if (jornada === '20-02') {
+        if (dayOfWeek === 6) {
+          return 'SABADO';
+        } else if (!esFestivoHoy && esFestivoManana) {
+          return 'LAB-FEST';
+        } else if (esFestivoHoy) {
+          return 'FESTIVO';
+        } else {
+          return 'LABORABLE';
+        }
+      }
+    }
+
+    // Para jornadas diurnas (08-14, 14-20)
+    if (esFestivoHoy) {
+      return 'FESTIVO';
+    } else if (dayOfWeek === 6) {
+      return 'SABADO';
+    } else {
+      return 'LABORABLE';
+    }
   }
 }
 

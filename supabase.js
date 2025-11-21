@@ -48,6 +48,10 @@ function initSupabase() {
   }
 
   supabase = window.supabase.createClient(SUPABASE_CONFIG.URL, SUPABASE_CONFIG.ANON_KEY);
+
+  // Exponer el cliente globalmente para que premium.js pueda usarlo
+  window.supabase = supabase;
+
   console.log('✅ Supabase inicializado correctamente');
   return true;
 }

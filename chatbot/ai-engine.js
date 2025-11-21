@@ -61,12 +61,52 @@ class AIEngine {
         confidence: 0.9
       },
 
-      // SALARIO
+      // JORNALES MES PASADO
+      'jornales_mes_pasado': {
+        patterns: [
+          /cuántos? jornales? (tuve|llev[eé]|trabaj[eé]) (el|este)? ?(mes )?(pasado|anterior)/i,
+          /jornales? del mes pasado/i,
+          /jornales? (de|del) mes anterior/i,
+          /cuántos? (días )?trabaj[eé] (el )?(mes )?pasado/i
+        ],
+        response: 'consultar_jornales_mes_pasado',
+        confidence: 0.95
+      },
+
+      // SALARIO MES PASADO
+      'salario_mes_pasado': {
+        patterns: [
+          /cuánto (gané|cobré|llev[eé] ganado) (el|este)? ?(mes )?pasado/i,
+          /salario (del|el) mes pasado/i,
+          /sueldo (del|el) mes (pasado|anterior)/i,
+          /gané.*mes pasado/i
+        ],
+        response: 'consultar_salario_mes_pasado',
+        confidence: 0.95
+      },
+
+      // SALARIO ANUAL (debe ir ANTES de salario para no ser capturado)
+      'salario_anual': {
+        patterns: [
+          /cuánto (llevo|he) ganado (este|el) año/i,
+          /total (del )?año/i,
+          /ganancia anual/i,
+          /salario anual/i,
+          /ganado (este|en el) año/i,
+          /llevo ganado.*año/i,
+          /gané.*año/i
+        ],
+        response: 'consultar_salario_anual',
+        confidence: 0.95
+      },
+
+      // SALARIO (quincena)
       'salario': {
         patterns: [
           /cuánto (voy a )?cobr(o|ar|aré)/i,
           /mi (sueldo|salario)/i,
-          /cuánto (llevo )?ganado/i,
+          /cuánto (llevo )?ganado( (esta|la) quincena)?/i,
+          /llevo ganado/i,
           /sueldómetro/i,
           /dinero/i,
           /nómina/i
@@ -75,42 +115,63 @@ class AIEngine {
         confidence: 0.9
       },
 
-      // SALARIO ANUAL
-      'salario_anual': {
-        patterns: [
-          /cuánto (llevo|he) ganado (este|el) año/i,
-          /total (del )?año/i,
-          /ganancia anual/i,
-          /salario anual/i,
-          /ganado (este|en el) año/i,
-          /llevo ganado.*año/i
-        ],
-        response: 'consultar_salario_anual',
-        confidence: 0.9
-      },
-
-      // JORNAL MÁS ALTO
+      // JORNAL MÁS ALTO (QUINCENA)
       'jornal_maximo': {
         patterns: [
-          /(cuál|cual) (es|fue) (el|mi) jornal más alto/i,
-          /jornal (más|mas) alto/i,
-          /mejor jornal/i,
-          /máximo jornal/i
+          /(cuál|cual) (es|fue) (el|mi) jornal (más|mas) alto( (de |esta )?quincena)?$/i,
+          /jornal (más|mas) alto( (de |esta )?quincena)?$/i,
+          /mejor jornal( (de |esta )?quincena)?$/i,
+          /máximo jornal( (de |esta )?quincena)?$/i
         ],
         response: 'consultar_jornal_maximo',
         confidence: 0.9
       },
 
-      // PRIMA MÁS ALTA
+      // JORNAL MÁS ALTO (MES PASADO)
+      'jornal_maximo_mes_pasado': {
+        patterns: [
+          /(cuál|cual) (fue|era) (el|mi) jornal (más|mas) alto (del|el) mes pasado/i,
+          /jornal (más|mas) alto (del|el) mes pasado/i,
+          /mejor jornal (del|el) mes pasado/i,
+          /máximo jornal (del|el) mes pasado/i
+        ],
+        response: 'consultar_jornal_maximo_mes_pasado',
+        confidence: 0.95
+      },
+
+      // PRIMA MÁS ALTA (QUINCENA)
       'prima_maxima': {
         patterns: [
-          /(cuál|cual) (es|fue) (la|mi) prima más alta/i,
-          /prima (más|mas) alta/i,
-          /mejor prima/i,
-          /máxima prima/i
+          /(cuál|cual) (es|fue) (la|mi) prima (más|mas) alta( (de |esta )?quincena)?$/i,
+          /prima (más|mas) alta( (de |esta )?quincena)?$/i,
+          /mejor prima( (de |esta )?quincena)?$/i,
+          /máxima prima( (de |esta )?quincena)?$/i
         ],
         response: 'consultar_prima_maxima',
         confidence: 0.9
+      },
+
+      // PRIMA MÁS ALTA (MES PASADO)
+      'prima_maxima_mes_pasado': {
+        patterns: [
+          /(cuál|cual) (fue|era) (la|mi) prima (más|mas) alta (del|el) mes pasado/i,
+          /prima (más|mas) alta (del|el) mes pasado/i,
+          /mejor prima (del|el) mes pasado/i,
+          /máxima prima (del|el) mes pasado/i
+        ],
+        response: 'consultar_prima_maxima_mes_pasado',
+        confidence: 0.95
+      },
+
+      // JORNALES POR HORARIO
+      'jornales_por_horario': {
+        patterns: [
+          /cuántos? jornales? (llevo|tengo|he trabajado) (de|desde|entre) (\d{1,2}).*?(\d{1,2})/i,
+          /jornales? en (jornada|horario|turno) (de |desde )?(\d{1,2}).*?(\d{1,2})/i,
+          /cu[aá]ntos? (jornales? )?de (\d{1,2}).*?(\d{1,2})/i
+        ],
+        response: 'consultar_jornales_horario',
+        confidence: 0.85
       },
 
       // DÓNDE TRABAJO HOY
@@ -143,17 +204,19 @@ class AIEngine {
       'no_disponible': {
         patterns: [
           /poner(me)? no disponible/i,
-          /(abrir?|abreme|abre) (el )?formulario (de )?no disponibilidad/i,
-          /no (puedo|voy a) trabajar/i,
+          /no disponibilidad/i,
+          /formulario.*no disponib/i,
+          /(abrir?|abreme|abre|enseña|muestra).*formulario.*disponib/i,
+          /no (puedo|voy a|pueda) trabajar/i,
           /reportar ausencia/i,
           /^no disponible$/i,
-          /(quiero|voy a) poner(me)? no disponible/i,
+          /(quiero|voy a|necesito) (poner|estar|quedar)(me)? no disponible/i,
           /ponme no disponible/i,
-          /^no disponible/i,
-          /disponible$/i
+          /\b(abrir?|abreme|enseña|muestra).*no disponib/i,
+          /formulario de ausencia/i
         ],
         response: 'abrir_no_disponible',
-        confidence: 0.9
+        confidence: 0.95
       },
 
       // ACCIONES - PUNTO Y HS
@@ -329,6 +392,7 @@ class AIEngine {
     // Detectar intención
     let intent = this.detectIntent(cleanMessage);
     console.log('🎯 Intención detectada:', intent);
+    console.log('📍 Action detectada:', intent.action, '| Name:', intent.name);
 
     // Si pide más información/detalles, usar el último intent
     if (intent.action === 'ampliar_informacion' && this.lastIntent) {
@@ -408,7 +472,28 @@ class AIEngine {
         let respuesta = `📋 **Detalles completos de jornales:**\n\n`;
 
         for (const jornal of jornales) {
-          const fecha = jornal.fecha ? new Date(jornal.fecha).toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: '2-digit' }) : '-';
+          let fecha = '-';
+          if (jornal.fecha) {
+            // Si la fecha está en formato español dd/mm/yyyy
+            if (jornal.fecha.includes('/')) {
+              const partes = jornal.fecha.split('/');
+              if (partes.length === 3) {
+                // Crear fecha desde dd/mm/yyyy
+                const dateObj = new Date(partes[2], partes[1] - 1, partes[0]);
+                if (!isNaN(dateObj.getTime())) {
+                  fecha = dateObj.toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: '2-digit' });
+                } else {
+                  fecha = jornal.fecha; // Usar el valor original si falla
+                }
+              }
+            } else {
+              // Si está en formato ISO yyyy-mm-dd
+              const dateObj = new Date(jornal.fecha);
+              if (!isNaN(dateObj.getTime())) {
+                fecha = dateObj.toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: '2-digit' });
+              }
+            }
+          }
           respuesta += `**${fecha}**\n`;
           respuesta += `  • Empresa: ${jornal.empresa || 'N/A'}\n`;
           respuesta += `  • Puesto: ${jornal.puesto || 'N/A'}\n`;
@@ -460,19 +545,42 @@ class AIEngine {
     }
 
     if (intent.action === 'consultar_salario') {
+      console.log('🔹 Usando handleSalarioQuery (quincena)');
       return await this.handleSalarioQuery();
     }
 
+    if (intent.action === 'consultar_salario_mes_pasado') {
+      console.log('🔹 Usando handleSalarioMesPasadoQuery');
+      return await this.handleSalarioMesPasadoQuery();
+    }
+
     if (intent.action === 'consultar_salario_anual') {
+      console.log('🔹 Usando handleSalarioAnualQuery (año completo)');
       return await this.handleSalarioAnualQuery();
     }
 
+    if (intent.action === 'consultar_jornales_mes_pasado') {
+      return await this.handleJornalesMesPasadoQuery();
+    }
+
     if (intent.action === 'consultar_jornal_maximo') {
-      return await this.handleJornalMaximoQuery();
+      return await this.handleJornalMaximoQuery('quincena');
+    }
+
+    if (intent.action === 'consultar_jornal_maximo_mes_pasado') {
+      return await this.handleJornalMaximoQuery('mes-pasado');
     }
 
     if (intent.action === 'consultar_prima_maxima') {
-      return await this.handlePrimaMaximaQuery();
+      return await this.handlePrimaMaximaQuery('quincena');
+    }
+
+    if (intent.action === 'consultar_prima_maxima_mes_pasado') {
+      return await this.handlePrimaMaximaQuery('mes-pasado');
+    }
+
+    if (intent.action === 'consultar_jornales_horario') {
+      return await this.handleJornalesHorarioQuery(userMessage);
     }
 
     if (intent.action === 'consultar_contratacion') {
@@ -592,9 +700,21 @@ class AIEngine {
       }
 
       if (puertas && puertas.length > 0) {
-        respuesta += `\n🚪 **Puertas de hoy:**\n`;
+        respuesta += `\n┏━━━━━━━━━━━━━━━━━━━━━━┓\n`;
+        respuesta += `┃ 🚪 **PUERTAS DE HOY** ┃\n`;
+        respuesta += `┗━━━━━━━━━━━━━━━━━━━━━━┛\n\n`;
+
         for (const puerta of puertas) {
-          respuesta += `  • ${puerta.jornada}: SP=${puerta.sp}, OC=${puerta.oc}\n`;
+          // Determinar emoji según la jornada
+          let emoji = '🕐';
+          if (puerta.jornada.includes('02-08')) emoji = '🌙';
+          else if (puerta.jornada.includes('08-14')) emoji = '☀️';
+          else if (puerta.jornada.includes('14-20')) emoji = '🌤️';
+          else if (puerta.jornada.includes('20-02')) emoji = '🌆';
+          else if (puerta.jornada.toLowerCase().includes('festivo')) emoji = '🎉';
+
+          respuesta += `${emoji} **${puerta.jornada}**\n`;
+          respuesta += `   📍 SP: **${puerta.sp}**  |  ⚓ OC: **${puerta.oc}**\n\n`;
         }
       }
 
@@ -684,7 +804,23 @@ class AIEngine {
 
       respuesta += `**Últimos jornales:**\n`;
       for (const jornal of jornalesParaMostrar) {
-        const fecha = jornal.fecha ? new Date(jornal.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' }) : '-';
+        // Formatear fecha correctamente - puede venir como DD/MM/YYYY o YYYY-MM-DD
+        let fecha = '-';
+        if (jornal.fecha) {
+          if (jornal.fecha.includes('/')) {
+            // Formato DD/MM/YYYY - usar directamente
+            const partes = jornal.fecha.split('/');
+            if (partes.length === 3) {
+              fecha = `${partes[0]}/${partes[1]}`;
+            }
+          } else {
+            // Formato ISO YYYY-MM-DD
+            const dateObj = new Date(jornal.fecha);
+            if (!isNaN(dateObj.getTime())) {
+              fecha = dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
+            }
+          }
+        }
         respuesta += `• ${fecha} - ${jornal.empresa || 'N/A'} (${jornal.jornada || 'N/A'})\n`;
       }
 
@@ -721,25 +857,58 @@ class AIEngine {
 
   async handleSalarioQuery() {
     try {
-      const salario = await this.dataBridge.getSalarioQuincena();
+      const calculo = await this.dataBridge.calcularSueldoQuincena();
 
-      if (!salario) {
+      if (!calculo || calculo.jornales === 0) {
         return {
-          text: this.responses.sin_datos,
+          text: calculo?.mensaje || this.responses.sin_datos,
           intent: 'salario',
           confidence: 0.9
         };
       }
 
+      let respuesta = `💰 **${calculo.quincena}**: llevas **${calculo.jornales} jornales**\n\n`;
+      respuesta += `**Salario bruto:** ${calculo.salarioBruto}€\n`;
+      respuesta += `**IRPF (${calculo.irpfPorcentaje}%):** -${calculo.irpf}€\n`;
+      respuesta += `**Salario neto:** **${calculo.salarioNeto}€**\n\n`;
+
+      // Mostrar desglose de los últimos 3 jornales
+      if (calculo.detalleJornales && calculo.detalleJornales.length > 0) {
+        respuesta += `**Últimos jornales:**\n`;
+        const ultimosJornales = calculo.detalleJornales.slice(0, 3);
+        for (const jornal of ultimosJornales) {
+          let fecha = '-';
+          if (jornal.fecha) {
+            if (jornal.fecha.includes('/')) {
+              const partes = jornal.fecha.split('/');
+              if (partes.length === 3) fecha = `${partes[0]}/${partes[1]}`;
+            } else {
+              const dateObj = new Date(jornal.fecha);
+              if (!isNaN(dateObj.getTime())) {
+                fecha = dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
+              }
+            }
+          }
+          respuesta += `• ${fecha} - ${jornal.puesto} (${jornal.jornada}): ${jornal.total.toFixed(2)}€\n`;
+        }
+
+        if (calculo.jornales > 3) {
+          respuesta += `_...y ${calculo.jornales - 3} jornales más_\n`;
+        }
+      }
+
       return {
-        text: `Esta quincena llevas acumulado aproximadamente **${salario.bruto}€ brutos** (${salario.neto}€ netos).`,
+        text: respuesta,
         intent: 'salario',
         confidence: 0.9,
         data: {
           type: 'salario',
-          bruto: salario.bruto,
-          neto: salario.neto,
-          quincena: salario.quincena
+          bruto: calculo.salarioBruto,
+          neto: calculo.salarioNeto,
+          irpf: calculo.irpf,
+          jornales: calculo.jornales,
+          quincena: calculo.quincena,
+          detalle: calculo.detalleJornales
         }
       };
 
@@ -822,29 +991,32 @@ class AIEngine {
 
   async handleSalarioAnualQuery() {
     try {
-      const jornales = await this.dataBridge.getJornalesAnuales();
+      const calculo = await this.dataBridge.calcularSueldoAnual();
 
-      if (!jornales || jornales.length === 0) {
+      if (!calculo || calculo.jornales === 0) {
         return {
-          text: "No encontré jornales registrados este año.",
+          text: calculo?.mensaje || "No encontré jornales registrados este año.",
           intent: 'salario_anual',
           confidence: 0.9
         };
       }
 
-      // Estimación simple: 150€ brutos por jornal
-      const estimacionBruto = jornales.length * 150;
-      const estimacionNeto = Math.round(estimacionBruto * 0.85);
+      let respuesta = `📊 **Este año 2025**: llevas **${calculo.jornales} jornales** trabajados\n\n`;
+      respuesta += `**Salario bruto:** ${calculo.salarioBruto}€\n`;
+      respuesta += `**IRPF (${calculo.irpfPorcentaje}%):** -${calculo.irpf}€\n`;
+      respuesta += `**Salario neto:** **${calculo.salarioNeto}€**\n\n`;
+      respuesta += `_Cálculo con valores reales de la tabla salarial_`;
 
       return {
-        text: `Este año llevas **${jornales.length} jornales** trabajados.\n\nGanancias estimadas: **${estimacionBruto}€ brutos** (${estimacionNeto}€ netos).`,
+        text: respuesta,
         intent: 'salario_anual',
         confidence: 0.9,
         data: {
           type: 'salario_anual',
-          jornales: jornales.length,
-          bruto: estimacionBruto,
-          neto: estimacionNeto
+          jornales: calculo.jornales,
+          bruto: calculo.salarioBruto,
+          neto: calculo.salarioNeto,
+          irpf: calculo.irpf
         }
       };
 
@@ -858,44 +1030,195 @@ class AIEngine {
     }
   }
 
-  async handleJornalMaximoQuery() {
+  async handleSalarioMesPasadoQuery() {
     try {
-      const jornales = await this.dataBridge.getJornalesQuincena();
+      // Necesito crear una función similar a calcularSueldoQuincena pero para mes pasado
+      const jornalesData = await this.dataBridge.getJornalesMesPasado();
+
+      if (!jornalesData || jornalesData.total === 0) {
+        return {
+          text: "No encontré jornales en el mes pasado.",
+          intent: 'salario_mes_pasado',
+          confidence: 0.9
+        };
+      }
+
+      // Calcular salario usando la misma lógica
+      const [mapeoPuestos, tablaSalarial] = await Promise.all([
+        window.SheetsAPI.getMapeoPuestos(),
+        window.SheetsAPI.getTablaSalarial()
+      ]);
+
+      let irpfPorcentaje = 15;
+      try {
+        const configUsuario = await window.SheetsAPI.getUserConfig(this.dataBridge.currentChapa);
+        if (configUsuario && configUsuario.irpf) {
+          irpfPorcentaje = configUsuario.irpf;
+        }
+      } catch (error) {
+        console.warn('⚠️ Error cargando IRPF, usando 15%');
+      }
+
+      let salarioBrutoTotal = 0;
+
+      for (const jornal of jornalesData.jornales) {
+        const puestoLower = jornal.puesto.trim().toLowerCase();
+        const mapeo = mapeoPuestos.find(m => m.puesto.trim().toLowerCase() === puestoLower);
+
+        if (!mapeo) continue;
+
+        const grupoSalarial = mapeo.grupo_salarial;
+        const jornada = jornal.jornada.replace(/\s+a\s+/g, '-').replace(/\s+/g, '');
+        const tipoDia = this.dataBridge.determinarTipoDia(jornal.fecha, jornada);
+        const claveJornada = `${jornada}_${tipoDia}`;
+
+        const salarioRow = tablaSalarial.find(s => s.clave_jornada === claveJornada);
+        if (!salarioRow) continue;
+
+        let salarioBase = 0;
+        if (grupoSalarial === 'Grupo 1') {
+          salarioBase = parseFloat(salarioRow.jornal_base_g1) || 0;
+        } else if (grupoSalarial === 'Grupo 2') {
+          salarioBase = parseFloat(salarioRow.jornal_base_g2) || 0;
+        }
+
+        if (puestoLower === 'trincador' || puestoLower === 'trincador de coches') {
+          salarioBase += 46.94;
+        }
+
+        let prima = 0;
+        if (mapeo.tipo_operativa === 'Coches') {
+          prima = parseFloat(salarioRow.prima_minima_coches) || 0;
+        } else if (mapeo.tipo_operativa === 'Contenedor') {
+          prima = 120 * (parseFloat(salarioRow.coef_prima_mayor120) || 0);
+        }
+
+        salarioBrutoTotal += salarioBase + prima;
+      }
+
+      const irpfImporte = (salarioBrutoTotal * irpfPorcentaje) / 100;
+      const salarioNeto = salarioBrutoTotal - irpfImporte;
+
+      let respuesta = `💰 **${jornalesData.mes}**: trabajaste **${jornalesData.total} jornales**\n\n`;
+      respuesta += `**Salario bruto:** ${salarioBrutoTotal.toFixed(2)}€\n`;
+      respuesta += `**IRPF (${irpfPorcentaje}%):** -${irpfImporte.toFixed(2)}€\n`;
+      respuesta += `**Salario neto:** **${salarioNeto.toFixed(2)}€**\n`;
+
+      return {
+        text: respuesta,
+        intent: 'salario_mes_pasado',
+        confidence: 0.9,
+        data: {
+          type: 'salario_mes_pasado',
+          bruto: salarioBrutoTotal.toFixed(2),
+          neto: salarioNeto.toFixed(2),
+          irpf: irpfImporte.toFixed(2),
+          jornales: jornalesData.total,
+          mes: jornalesData.mes
+        }
+      };
+
+    } catch (error) {
+      console.error('Error en handleSalarioMesPasadoQuery:', error);
+      return {
+        text: this.responses.error_datos,
+        intent: 'salario_mes_pasado',
+        confidence: 0.9
+      };
+    }
+  }
+
+  async handleJornalesMesPasadoQuery() {
+    try {
+      const jornales = await this.dataBridge.getJornalesMesPasado();
 
       if (!jornales || jornales.total === 0) {
         return {
-          text: "No encontré jornales en esta quincena.",
-          intent: 'jornal_maximo',
+          text: "No encontré jornales registrados en el mes pasado.",
+          intent: 'jornales_mes_pasado',
           confidence: 0.9
         };
       }
 
-      // Analizar jornales para encontrar el más alto
-      let maxJornal = null;
-      let maxValor = 0;
+      // Crear resumen de jornales
+      let respuesta = `📊 **${jornales.mes}**: trabajaste **${jornales.total} jornales**\n\n`;
 
-      for (const jornal of jornales.jornales) {
-        // Estimación: jornada completa = 150€, media = 75€
-        let valor = jornal.jornada === 'COMPLETA' ? 150 : 75;
+      // Mostrar los primeros 5 jornales como resumen
+      const jornalesParaMostrar = jornales.jornales.slice(0, 5);
 
-        if (valor > maxValor) {
-          maxValor = valor;
-          maxJornal = jornal;
+      respuesta += `**Últimos jornales:**\n`;
+      for (const jornal of jornalesParaMostrar) {
+        let fecha = '-';
+        if (jornal.fecha) {
+          if (jornal.fecha.includes('/')) {
+            const partes = jornal.fecha.split('/');
+            if (partes.length === 3) {
+              fecha = `${partes[0]}/${partes[1]}`;
+            }
+          } else {
+            const dateObj = new Date(jornal.fecha);
+            if (!isNaN(dateObj.getTime())) {
+              fecha = dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
+            }
+          }
         }
+        respuesta += `• ${fecha} - ${jornal.empresa || 'N/A'} (${jornal.jornada || 'N/A'})\n`;
       }
 
-      if (!maxJornal) {
-        return {
-          text: "No pude determinar el jornal más alto.",
-          intent: 'jornal_maximo',
-          confidence: 0.9
-        };
+      if (jornales.total > 5) {
+        respuesta += `\n_...y ${jornales.total - 5} jornales más_\n`;
       }
 
       return {
-        text: `Tu jornal más alto esta quincena fue de aproximadamente **${maxValor}€**\n\nEmpresa: ${maxJornal.empresa}\nPuesto: ${maxJornal.puesto}\nJornada: ${maxJornal.jornada}`,
-        intent: 'jornal_maximo',
+        text: respuesta,
+        intent: 'jornales_mes_pasado',
+        confidence: 0.9,
+        data: {
+          type: 'jornales_mes_pasado',
+          total: jornales.total,
+          mes: jornales.mes,
+          jornales: jornales.jornales
+        }
+      };
+
+    } catch (error) {
+      console.error('Error en handleJornalesMesPasadoQuery:', error);
+      return {
+        text: this.responses.error_datos,
+        intent: 'jornales_mes_pasado',
         confidence: 0.9
+      };
+    }
+  }
+
+  async handleJornalMaximoQuery(periodo = 'quincena') {
+    try {
+      const jornalMax = await this.dataBridge.getJornalMasAlto(periodo);
+
+      if (!jornalMax) {
+        const periodoTexto = periodo === 'quincena' ? 'esta quincena' : 'el mes pasado';
+        return {
+          text: `No encontré jornales en ${periodoTexto}.`,
+          intent: 'jornal_maximo',
+          confidence: 0.9
+        };
+      }
+
+      const periodoTexto = periodo === 'quincena' ? 'esta quincena' : 'el mes pasado';
+      let respuesta = `💰 **Tu jornal más alto de ${periodoTexto}**: **${jornalMax.salarioCalculado.toFixed(2)}€**\n\n`;
+      respuesta += `📅 **Fecha**: ${jornalMax.fecha}\n`;
+      respuesta += `🏢 **Empresa**: ${jornalMax.empresa}\n`;
+      respuesta += `👷 **Puesto**: ${jornalMax.puesto}\n`;
+      respuesta += `🕐 **Jornada**: ${jornalMax.jornada}\n`;
+
+      return {
+        text: respuesta,
+        intent: 'jornal_maximo',
+        confidence: 0.9,
+        data: {
+          type: 'jornal_maximo',
+          jornal: jornalMax
+        }
       };
 
     } catch (error) {
@@ -908,23 +1231,36 @@ class AIEngine {
     }
   }
 
-  async handlePrimaMaximaQuery() {
+  async handlePrimaMaximaQuery(periodo = 'quincena') {
     try {
-      const jornales = await this.dataBridge.getJornalesQuincena();
+      const primaMax = await this.dataBridge.getPrimaMasAlta(periodo);
 
-      if (!jornales || jornales.total === 0) {
+      if (!primaMax) {
+        const periodoTexto = periodo === 'quincena' ? 'esta quincena' : 'el mes pasado';
         return {
-          text: "No encontré jornales con primas en esta quincena.",
+          text: `No encontré primas personalizadas en ${periodoTexto}.`,
           intent: 'prima_maxima',
           confidence: 0.9
         };
       }
 
-      // Por ahora, respuesta genérica ya que no tenemos datos de primas
+      const periodoTexto = periodo === 'quincena' ? 'esta quincena' : 'el mes pasado';
+      let respuesta = `🏆 **Tu prima más alta de ${periodoTexto}**: **${primaMax.prima_personalizada}€**\n\n`;
+      respuesta += `📅 **Fecha**: ${primaMax.fecha}\n`;
+      respuesta += `🕐 **Jornada**: ${primaMax.jornada}\n`;
+
+      if (primaMax.movimientos_personalizados > 0) {
+        respuesta += `📦 **Movimientos**: ${primaMax.movimientos_personalizados}\n`;
+      }
+
       return {
-        text: "Esta funcionalidad requiere datos de primas que aún no están disponibles en el sistema. Contacta con el administrador para más información.",
+        text: respuesta,
         intent: 'prima_maxima',
-        confidence: 0.9
+        confidence: 0.9,
+        data: {
+          type: 'prima_maxima',
+          prima: primaMax
+        }
       };
 
     } catch (error) {
@@ -932,6 +1268,82 @@ class AIEngine {
       return {
         text: this.responses.error_datos,
         intent: 'prima_maxima',
+        confidence: 0.9
+      };
+    }
+  }
+
+  async handleJornalesHorarioQuery(userMessage) {
+    try {
+      // Extraer horarios del mensaje (ej: "20 a 02" o "20-02")
+      const match = userMessage.match(/(\d{1,2}).*?(\d{1,2})/);
+
+      if (!match) {
+        return {
+          text: "No pude identificar el horario. Por favor, especifica el rango de horas (ej: 20 a 02).",
+          intent: 'jornales_horario',
+          confidence: 0.9
+        };
+      }
+
+      const horarioInicio = match[1].padStart(2, '0');
+      const horarioFin = match[2].padStart(2, '0');
+
+      // Por defecto, buscar en la quincena
+      const jornales = await this.dataBridge.getJornalesPorHorario(horarioInicio, horarioFin, 'quincena');
+
+      if (!jornales || jornales.total === 0) {
+        return {
+          text: `No encontré jornales en el horario ${horarioInicio}:00 a ${horarioFin}:00 esta quincena.`,
+          intent: 'jornales_horario',
+          confidence: 0.9
+        };
+      }
+
+      let respuesta = `📊 **Jornales de ${horarioInicio}:00 a ${horarioFin}:00 esta quincena**: **${jornales.total} jornales**\n\n`;
+
+      // Mostrar los primeros 5
+      const jornalesParaMostrar = jornales.jornales.slice(0, 5);
+
+      for (const jornal of jornalesParaMostrar) {
+        let fecha = '-';
+        if (jornal.fecha) {
+          if (jornal.fecha.includes('/')) {
+            const partes = jornal.fecha.split('/');
+            if (partes.length === 3) {
+              fecha = `${partes[0]}/${partes[1]}`;
+            }
+          } else {
+            const dateObj = new Date(jornal.fecha);
+            if (!isNaN(dateObj.getTime())) {
+              fecha = dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
+            }
+          }
+        }
+        respuesta += `• ${fecha} - ${jornal.empresa || 'N/A'}\n`;
+      }
+
+      if (jornales.total > 5) {
+        respuesta += `\n_...y ${jornales.total - 5} jornales más_\n`;
+      }
+
+      return {
+        text: respuesta,
+        intent: 'jornales_horario',
+        confidence: 0.9,
+        data: {
+          type: 'jornales_horario',
+          total: jornales.total,
+          horario: `${horarioInicio}-${horarioFin}`,
+          jornales: jornales.jornales
+        }
+      };
+
+    } catch (error) {
+      console.error('Error en handleJornalesHorarioQuery:', error);
+      return {
+        text: this.responses.error_datos,
+        intent: 'jornales_horario',
         confidence: 0.9
       };
     }

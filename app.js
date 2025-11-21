@@ -173,16 +173,22 @@ function formatearFecha(fecha) {
  */
 async function initPremiumFeatureLocks() {
   try {
+    console.log('🔐 [INIT] Iniciando sistema de bloqueo premium...');
+
     // Esperar a que los servicios estén cargados
     await new Promise(resolve => setTimeout(resolve, 500));
 
     // Verificar que FeatureLock está disponible
+    console.log('🔐 [INIT] FeatureLock disponible:', typeof FeatureLock !== 'undefined');
+    console.log('🔐 [INIT] window.premiumServices disponible:', typeof window.premiumServices !== 'undefined');
+
     if (typeof FeatureLock === 'undefined') {
       console.warn('⚠️ FeatureLock no está disponible. Sistema premium no activo.');
       return;
     }
 
     const chapa = localStorage.getItem('currentChapa');
+    console.log('🔐 [INIT] Chapa actual:', chapa);
 
     if (!chapa) {
       console.log('ℹ️ Usuario no logueado, no verificar premium');
@@ -191,27 +197,46 @@ async function initPremiumFeatureLocks() {
 
     console.log('🔐 Verificando acceso premium para chapa:', chapa);
 
+    // Verificar que los contenedores existen
+    const sueldometroContainer = document.querySelector('#sueldometro-container');
+    const oraculoContainer = document.querySelector('#oraculo-container');
+    console.log('🔐 [INIT] Contenedor Sueldómetro existe:', !!sueldometroContainer);
+    console.log('🔐 [INIT] Contenedor Oráculo existe:', !!oraculoContainer);
+
     // Bloquear Sueldómetro
+    console.log('🔐 [INIT] Creando lock para Sueldómetro...');
     const sueldometroLock = new FeatureLock('sueldometro');
     const sueldometroBloqueado = await sueldometroLock.bloquear('#sueldometro-container');
 
+    console.log('🔐 [INIT] Sueldómetro bloqueado:', sueldometroBloqueado);
+
     if (sueldometroBloqueado) {
       console.log('🔒 Sueldómetro bloqueado - requiere premium');
+    } else {
+      console.log('✅ Usuario tiene acceso a Sueldómetro');
     }
 
     // Bloquear Oráculo
+    console.log('🔐 [INIT] Creando lock para Oráculo...');
     const oraculoLock = new FeatureLock('oraculo');
     const oraculoBloqueado = await oraculoLock.bloquear('#oraculo-container');
 
+    console.log('🔐 [INIT] Oráculo bloqueado:', oraculoBloqueado);
+
     if (oraculoBloqueado) {
       console.log('🔒 Oráculo bloqueado - requiere premium');
+    } else {
+      console.log('✅ Usuario tiene acceso a Oráculo');
     }
+
+    console.log('🔐 [INIT] Sistema de bloqueo premium completado');
 
     // Nota: El Chatbot IA tiene su propio sistema de control en su página
     // No necesitamos bloquearlo aquí
 
   } catch (error) {
     console.error('❌ Error inicializando feature locks:', error);
+    console.error('Stack trace:', error.stack);
   }
 }
 
@@ -239,10 +264,8 @@ document.addEventListener('DOMContentLoaded', () => {
   setupEventListeners();
   checkStoredSession();
 
-  // ===============================================
-  // SISTEMA PREMIUM - Bloquear features
-  // ===============================================
-  initPremiumFeatureLocks();
+  // NOTA: initPremiumFeatureLocks() se llama en loginUser() y checkStoredSession()
+  // No tiene sentido llamarlo aquí porque no hay usuario todavía
 
   // ===============================================
   // NAVEGACIÓN AUTOMÁTICA DESDE NOTIFICACIONES PUSH
@@ -545,9 +568,24 @@ function checkStoredSession() {
     AppState.isAuthenticated = true;
     updateUIForAuthenticatedUser();
 
-    // IMPORTANTE: Si hay sesión válida, redirigir automáticamente al dashboard
-    // NO mostrar la pantalla de login
-    navigateTo('dashboard');
+    // ===============================================
+    // SISTEMA PREMIUM - Bloquear features al restaurar sesión
+    // ===============================================
+    console.log('🔐 Aplicando bloqueos premium al restaurar sesión...');
+    initPremiumFeatureLocks();
+
+    // IMPORTANTE: Si hay sesión válida, redirigir automáticamente
+    // Verificar si hay un hash en la URL para ir directamente a esa sección
+    const hash = window.location.hash.replace('#', '');
+
+    if (hash && ['oraculo', 'calculadora', 'jornales', 'sueldometro', 'puertas', 'censo', 'foro'].includes(hash)) {
+      console.log(`🔗 Hash detectado en URL: ${hash}, navegando directamente`);
+      navigateTo(hash === 'calculadora' ? 'oraculo' : hash);
+    } else {
+      // NO mostrar la pantalla de login, ir al dashboard
+      navigateTo('dashboard');
+    }
+
     return true; // Indica que hay sesión activa
   }
 
@@ -707,6 +745,12 @@ async function loginUser(chapa, nombre = null) {
   // Iniciar auto-refresh de primas e IRPF (cada 5 minutos)
   startAutoRefresh();
 
+  // ===============================================
+  // SISTEMA PREMIUM - Bloquear features después del login
+  // ===============================================
+  console.log('🔐 Aplicando bloqueos premium después del login...');
+  initPremiumFeatureLocks();
+
   // Verificar si hay una navegación pendiente desde una notificación
   const pendingNavigation = sessionStorage.getItem('pendingNavigation');
   if (pendingNavigation) {
@@ -728,6 +772,9 @@ function updateUIForAuthenticatedUser() {
   const sidebar = document.getElementById('sidebar');
   const mainContent = document.getElementById('main-content');
   const headerTitle = document.getElementById('header-title');
+
+  // Añadir clase 'authenticated' al body para mostrar el botón del chatbot
+  document.body.classList.add('authenticated');
 
   // Mostrar sidebar y ajustar layout
   if (sidebar) sidebar.classList.remove('hidden');
@@ -849,6 +896,9 @@ function handleLogout() {
   // Limpiar localStorage
   localStorage.removeItem('currentChapa');
   localStorage.removeItem('currentUserName');
+
+  // Remover clase 'authenticated' del body para ocultar el botón del chatbot
+  document.body.classList.remove('authenticated');
 
   // Ocultar información de usuario
   const userInfo = document.getElementById('user-info');
@@ -3122,6 +3172,24 @@ async function loadSueldometro() {
   const stats = document.getElementById('sueldometro-stats');
 
   if (!content) return;
+
+  // ⚠️ VERIFICAR PREMIUM ANTES DE CARGAR CONTENIDO
+  const chapa = localStorage.getItem('currentChapa');
+  if (chapa && typeof window.premiumServices !== 'undefined') {
+    try {
+      const tieneAcceso = await window.premiumServices.tieneAccesoFeature(chapa, 'sueldometro');
+      if (!tieneAcceso) {
+        console.log('🔒 Acceso denegado al Sueldómetro - Usuario sin premium');
+        // No cargar contenido, el overlay ya está presente
+        loading.classList.add('hidden');
+        return;
+      }
+      console.log('✅ Usuario con acceso premium al Sueldómetro');
+    } catch (error) {
+      console.error('❌ Error verificando acceso premium:', error);
+      // En caso de error, permitir acceso (fail-open) para evitar bloquear usuarios legítimos
+    }
+  }
 
   loading.classList.remove('hidden');
   content.innerHTML = '';

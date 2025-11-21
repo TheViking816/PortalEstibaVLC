@@ -35,22 +35,31 @@ export async function tienePremium(chapa) {
  */
 export async function tieneAccesoFeature(chapa, feature) {
   try {
+    console.log(`🔍 [PREMIUM DEBUG] Verificando acceso para chapa=${chapa}, feature=${feature}`);
+
     if (!window.supabase) {
       console.error('❌ Supabase no está inicializado');
       return false;
     }
+
+    console.log(`🔍 [PREMIUM DEBUG] Llamando a RPC 'tiene_acceso_feature'...`);
 
     const { data, error } = await window.supabase.rpc('tiene_acceso_feature', {
       chapa_usuario: chapa,
       nombre_feature: feature
     });
 
+    console.log(`🔍 [PREMIUM DEBUG] Resultado RPC - data:`, data, 'error:', error);
+
     if (error) {
       console.error(`❌ Error verificando feature ${feature}:`, error);
       return false;
     }
 
-    return data === true;
+    const tieneAcceso = data === true;
+    console.log(`🔍 [PREMIUM DEBUG] ¿Tiene acceso? ${tieneAcceso}`);
+
+    return tieneAcceso;
 
   } catch (error) {
     console.error('❌ Error en tieneAccesoFeature:', error);

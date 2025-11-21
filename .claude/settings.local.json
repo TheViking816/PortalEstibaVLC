@@ -13,7 +13,10 @@
       "Bash(git add:*)",
       "Bash(cat:*)",
       "Bash(git config:*)",
-      "Bash(md5sum:*)"
+      "Bash(md5sum:*)",
+      "Bash(git rebase:*)",
+      "Bash(git reset:*)",
+      "Bash(README.md)"
     ],
     "deny": [],
     "ask": []

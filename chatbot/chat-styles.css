@@ -39,6 +39,7 @@ body {
   position: relative;
 }
 
+/* Fondo con patrón náutico sutil */
 body::before {
   content: '';
   position: fixed;
@@ -47,8 +48,35 @@ body::before {
   right: 0;
   bottom: 0;
   background:
-    radial-gradient(circle at 20% 50%, rgba(14, 165, 233, 0.05) 0%, transparent 50%),
-    radial-gradient(circle at 80% 80%, rgba(6, 182, 212, 0.05) 0%, transparent 50%);
+    repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 35px,
+      rgba(14, 165, 233, 0.02) 35px,
+      rgba(14, 165, 233, 0.02) 70px
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 35px,
+      rgba(6, 182, 212, 0.02) 35px,
+      rgba(6, 182, 212, 0.02) 70px
+    );
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Overlay adicional con gradiente para mejor contraste */
+body::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background:
+    radial-gradient(circle at 20% 50%, rgba(14, 165, 233, 0.08) 0%, transparent 50%),
+    radial-gradient(circle at 80% 80%, rgba(6, 182, 212, 0.08) 0%, transparent 50%);
   pointer-events: none;
   z-index: 0;
 }
@@ -126,28 +154,47 @@ body::before {
 }
 
 .chat-container::-webkit-scrollbar {
-  width: 6px;
+  width: 10px;
 }
 
 .chat-container::-webkit-scrollbar-track {
-  background: transparent;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  margin: 4px;
 }
 
 .chat-container::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 3px;
+  background: linear-gradient(180deg, #4a5568 0%, #2d3748 100%);
+  border-radius: 10px;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.chat-container::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #5a6678 0%, #3d4758 100%);
+}
+
+.chat-container::-webkit-scrollbar-thumb:active {
+  background: linear-gradient(180deg, #6a7688 0%, #4d5768 100%);
+}
+
+/* Scrollbar para Firefox */
+.chat-container {
+  scrollbar-width: thin;
+  scrollbar-color: #4a5568 rgba(255, 255, 255, 0.05);
 }
 
 /* =============================================================================
    WELCOME CARD
    ============================================================================= */
 .welcome-card {
-  background: var(--surface);
+  background: rgba(255, 255, 255, 0.98);
   border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 4px 16px var(--shadow);
+  box-shadow: 0 8px 32px rgba(15, 23, 42, 0.12);
   margin-bottom: 2rem;
   animation: fadeInUp 0.6s ease;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .welcome-header {
@@ -345,16 +392,20 @@ body::before {
 }
 
 .message.bot .message-bubble {
-  background: var(--bot-bubble);
+  background: rgba(248, 250, 252, 0.95);
   color: var(--text-primary);
   border-bottom-left-radius: 4px;
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(226, 232, 240, 0.5);
+  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.08);
 }
 
 .message.user .message-bubble {
   background: var(--user-bubble);
   color: white;
   border-bottom-right-radius: 4px;
-  box-shadow: 0 2px 8px rgba(14, 165, 233, 0.2);
+  box-shadow: 0 4px 16px rgba(14, 165, 233, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .message-time {

@@ -468,19 +468,72 @@ class ChatApp {
     }
 
     if (data.type === 'puertas') {
-      let puertasHTML = '<h4>Puertas del Día</h4>';
+      let puertasHTML = `
+        <div style="text-align: center; margin-bottom: 1rem; padding: 0.75rem; background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%); border-radius: 12px; color: white;">
+          <h4 style="margin: 0; font-size: 1.1rem; font-weight: 600;">🚪 Puertas del Día</h4>
+        </div>
+        <div style="display: grid; gap: 0.75rem;">
+      `;
 
       data.puertas.forEach(p => {
+        // Determinar emoji y color según la jornada
+        let emoji = '🕐';
+        let colorAccent = '#0ea5e9';
+        const jornada = p.jornada.toLowerCase();
+
+        if (jornada.includes('02-08')) {
+          emoji = '🌙';
+          colorAccent = '#6366f1'; // Púrpura
+        } else if (jornada.includes('08-14')) {
+          emoji = '☀️';
+          colorAccent = '#f59e0b'; // Amarillo
+        } else if (jornada.includes('14-20')) {
+          emoji = '🌤️';
+          colorAccent = '#ec4899'; // Rosa
+        } else if (jornada.includes('20-02')) {
+          emoji = '🌆';
+          colorAccent = '#8b5cf6'; // Morado
+        } else if (jornada.includes('festivo')) {
+          emoji = '🎉';
+          colorAccent = '#10b981'; // Verde
+        }
+
         puertasHTML += `
-          <div class="data-grid" style="margin-top: 0.5rem;">
-            <div class="data-item">
-              <div class="label">${p.jornada}</div>
-              <div class="value" style="font-size: 1rem;">SP: ${p.sp} | OC: ${p.oc}</div>
+          <div style="
+            border: 2px solid ${colorAccent}20;
+            border-left: 4px solid ${colorAccent};
+            border-radius: 10px;
+            padding: 0.875rem;
+            background: linear-gradient(135deg, ${colorAccent}08 0%, transparent 100%);
+            transition: all 0.3s ease;
+          ">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+              <div style="font-weight: 600; font-size: 1rem; color: #0f172a; display: flex; align-items: center; gap: 0.5rem;">
+                <span style="font-size: 1.25rem;">${emoji}</span>
+                <span>${p.jornada}</span>
+              </div>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 0.5rem;">
+              <div style="display: flex; align-items: center; gap: 0.5rem; background: white; padding: 0.5rem; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                <span style="font-size: 1rem;">📍</span>
+                <div style="flex: 1;">
+                  <div style="font-size: 0.7rem; color: #64748b; font-weight: 500;">San Pedro</div>
+                  <div style="font-size: 1.1rem; font-weight: 700; color: ${colorAccent};">${p.sp}</div>
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 0.5rem; background: white; padding: 0.5rem; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                <span style="font-size: 1rem;">⚓</span>
+                <div style="flex: 1;">
+                  <div style="font-size: 0.7rem; color: #64748b; font-weight: 500;">Oceánica</div>
+                  <div style="font-size: 1.1rem; font-weight: 700; color: ${colorAccent};">${p.oc}</div>
+                </div>
+              </div>
             </div>
           </div>
         `;
       });
 
+      puertasHTML += `</div>`;
       card.innerHTML = puertasHTML;
     }
 
@@ -511,18 +564,19 @@ class ChatApp {
     if (action.type === 'navigate_pwa') {
       console.log('Navegar a:', action.page);
 
-      // Determinar la URL de la PWA principal (puerto 8081)
-      let targetUrl = 'http://localhost:8081/';
+      // Usar rutas relativas para mantener la sesión
+      let targetUrl = '../index.html';
 
       if (action.page === 'calculadora') {
-        targetUrl = 'http://localhost:8081/index.html#oraculo';
+        targetUrl = '../index.html#oraculo';
       } else if (action.page === 'jornales') {
-        targetUrl = 'http://localhost:8081/index.html#jornales';
+        targetUrl = '../index.html#jornales';
       } else if (action.page === 'sueldometro') {
-        targetUrl = 'http://localhost:8081/index.html#sueldometro';
+        targetUrl = '../index.html#sueldometro';
       }
 
-      window.open(targetUrl, '_blank');
+      // Navegar en la misma ventana para mantener la sesión
+      window.location.href = targetUrl;
     }
   }
 
