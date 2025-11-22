@@ -6152,31 +6152,8 @@ async function loadCalculadora() {
             }
           } else {
             // No sale contratado segun la simulacion directa
-
-            // CASO ESPECIAL: Si el usuario esta justo detras de la puerta,
-            // la demanda de esta jornada lo alcanzara muy probablemente
-            if (estaJustoDetras && distanciaDirectaDetras > 0 && distanciaDirectaDetras <= demandaEventuales) {
-              // El usuario esta a pocas posiciones detras y la demanda es suficiente
-              // Usar la misma escala suavizada que cuando sale contratado
-              var margenEspecial = demandaEventuales - distanciaDirectaDetras;
-              if (margenEspecial >= 100) {
-                probBaseSalir = 0.88;
-              } else if (margenEspecial >= 80) {
-                probBaseSalir = 0.82 + (margenEspecial - 80) * 0.003;
-              } else if (margenEspecial >= 60) {
-                probBaseSalir = 0.75 + (margenEspecial - 60) * 0.0035;
-              } else if (margenEspecial >= 40) {
-                probBaseSalir = 0.65 + (margenEspecial - 40) * 0.005;
-              } else if (margenEspecial >= 20) {
-                probBaseSalir = 0.55 + (margenEspecial - 20) * 0.005;
-              } else if (margenEspecial >= 10) {
-                probBaseSalir = 0.48 + (margenEspecial - 10) * 0.007;
-              } else if (margenEspecial >= 0) {
-                probBaseSalir = 0.42 + margenEspecial * 0.006;
-              } else {
-                probBaseSalir = 0.35;
-              }
-            } else {
+            // Usar siempre el caso normal basado en cobertura
+            {
               // Caso normal: no sale y no esta justo detras
               var cobertura = demandaEventuales / Math.max(1, distanciaNecesaria);
 
