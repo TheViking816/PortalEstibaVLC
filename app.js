@@ -5941,18 +5941,28 @@ async function loadCalculadora() {
         }
 
         // Funcion para calcular distancia efectiva hasta usuario (solo disponibles)
-        // Retorna tambien si el usuario esta "justo detras" de la puerta (la puerta lo acaba de pasar)
+        // IMPORTANTE: Si el usuario esta en rojo, sumamos 1 para que la distancia
+        // refleje que la puerta tiene que llegar hasta su posicion igualmente
         function calcularDistanciaEfectiva(puerta, usuario) {
+          var distancia;
           if (usuario > puerta) {
             // Usuario esta delante
-            return contarDisponiblesEntre(puerta, usuario);
+            distancia = contarDisponiblesEntre(puerta, usuario);
           } else if (usuario < puerta) {
             // Usuario esta detras, hay que dar la vuelta
-            return contarDisponiblesEntre(puerta, limiteFin) + contarDisponiblesEntre(limiteInicio - 1, usuario);
+            distancia = contarDisponiblesEntre(puerta, limiteFin) + contarDisponiblesEntre(limiteInicio - 1, usuario);
           } else {
             // Misma posicion
             return 0;
           }
+
+          // Si el usuario NO esta disponible (rojo), la distancia calculada no lo incluye
+          // pero la puerta igualmente tiene que llegar hasta el, asi que sumamos 1
+          if (!estaDisponible(usuario)) {
+            distancia += 1;
+          }
+
+          return distancia;
         }
 
         // Funcion para detectar si el usuario esta "justo detras" de la puerta
@@ -5974,11 +5984,13 @@ async function loadCalculadora() {
 
         // Funcion para verificar si el usuario sale contratado
         // Avanza posicion por posicion, contando solo disponibles
+        // IMPORTANTE: Detecta si la puerta PASA por el usuario, este disponible o no
         function verificarContratacion(puertaInicio, demanda, usuario) {
           var posActual = puertaInicio;
           var contratados = 0;
           var vueltas = 0;
           var usuarioAlcanzado = false;
+          var puertaPasoPorUsuario = false; // Nueva variable: la puerta paso por la posicion del usuario
           var maxIteraciones = tamanoCenso * 3;
           var iteraciones = 0;
 
@@ -5987,6 +5999,11 @@ async function loadCalculadora() {
             if (posActual > limiteFin) {
               posActual = limiteInicio;
               vueltas++;
+            }
+
+            // Verificar si la puerta pasa por la posicion del usuario (este o no disponible)
+            if (posActual === usuario) {
+              puertaPasoPorUsuario = true;
             }
 
             // Si esta posicion esta disponible, se contrata
@@ -6003,6 +6020,7 @@ async function loadCalculadora() {
 
           return {
             alcanzado: usuarioAlcanzado,
+            puertaPasoPorUsuario: puertaPasoPorUsuario, // La puerta paso por el usuario aunque este en rojo
             puertaFinal: posActual,
             vueltas: vueltas,
             contratados: contratados
@@ -6090,6 +6108,7 @@ async function loadCalculadora() {
           puertaPrevista = resultadoContratacion.puertaFinal;
           var vuelta = resultadoContratacion.vueltas + 1;
           var saleContratado = resultadoContratacion.alcanzado;
+          var puertaPasoPorUsuario = resultadoContratacion.puertaPasoPorUsuario;
 
           // Calcular cuantas posiciones disponibles faltan para llegar al usuario
           var distanciaNecesaria = calcularDistanciaEfectiva(puertaAntes, posUsuarioCalc);
@@ -6097,9 +6116,14 @@ async function loadCalculadora() {
           // Acumular demanda
           demandaAcumulada += demandaEventuales;
 
+          // IMPORTANTE: Para el calculo de probabilidades, usamos puertaPasoPorUsuario
+          // Esto hace que usuarios en rojo tengan la misma probabilidad que si estuvieran disponibles
+          // porque la puerta pasa igualmente por su posicion
+          var usarLogicaContratado = saleContratado || puertaPasoPorUsuario;
+
           // Calcular margen
           var margen;
-          if (saleContratado) {
+          if (usarLogicaContratado) {
             var posicionesHastaUsuario = calcularDistanciaEfectiva(puertaAntes, posUsuarioCalc);
             margen = demandaEventuales - posicionesHastaUsuario;
           } else {
@@ -6124,28 +6148,26 @@ async function loadCalculadora() {
             distanciaDirectaDetras = puertaAntes - posUsuarioCalc;
           }
 
-          if (saleContratado) {
-            // Sale contratado: probabilidad modulada por el margen
-            // Escala mas suavizada y proporcional al margen real
-            // El margen es: demanda - posiciones hasta el usuario
-            // Margen alto = mucha holgura, pero nunca 99% porque es estimacion
-            if (margen >= 100) {
-              probBaseSalir = 0.88; // Margen muy amplio, pero es estimacion
-            } else if (margen >= 80) {
-              probBaseSalir = 0.82 + (margen - 80) * 0.003; // 82-88%
-            } else if (margen >= 60) {
-              probBaseSalir = 0.75 + (margen - 60) * 0.0035; // 75-82%
-            } else if (margen >= 40) {
-              probBaseSalir = 0.65 + (margen - 40) * 0.005; // 65-75%
-            } else if (margen >= 20) {
-              probBaseSalir = 0.55 + (margen - 20) * 0.005; // 55-65%
-            } else if (margen >= 10) {
-              probBaseSalir = 0.48 + (margen - 10) * 0.007; // 48-55%
-            } else if (margen >= 0) {
-              probBaseSalir = 0.42 + margen * 0.006; // 42-48%
+          if (usarLogicaContratado) {
+            // La puerta pasa por el usuario: probabilidad usando formula continua y suave
+            // Basada en el ratio margen/demanda para ser proporcional
+            // Esto evita saltos bruscos entre posiciones contiguas
+            var ratioMargen = margen / Math.max(1, demandaEventuales);
+
+            // Formula sigmoide suavizada: va de ~40% (ratio=0) a ~85% (ratio=1)
+            // prob = 0.40 + 0.45 * (ratio / (ratio + 0.3))
+            // Esto da una curva suave sin saltos
+            if (ratioMargen >= 1) {
+              // Margen >= demanda, muy seguro pero nunca 100%
+              probBaseSalir = 0.82 + Math.min(0.06, (ratioMargen - 1) * 0.03);
+            } else if (ratioMargen >= 0) {
+              // Formula suave: 42% base + hasta 40% segun ratio
+              probBaseSalir = 0.42 + 0.40 * (ratioMargen / (ratioMargen + 0.25));
             } else {
-              probBaseSalir = 0.38; // Justo en el limite
+              // Margen negativo (muy justo)
+              probBaseSalir = 0.38;
             }
+
             // Ajuste para OC con margen pequeño
             if (esUsuarioOC && margen <= 3) {
               probBaseSalir = Math.min(probBaseSalir, 0.45 + margen * 0.02);
@@ -6176,11 +6198,9 @@ async function loadCalculadora() {
           // esta jornada (la siguiente) deberia capturar la mayor parte de esa probabilidad.
           // Guardamos el indice para aplicar este ajuste despues del bucle
 
-          // Penalizar si es segunda vuelta del censo (doble turno opcional)
-          // En segunda vuelta, aproximadamente 50% de la gente esta disponible
-          if (esSegundaVueltaCenso) {
-            probBaseSalir = probBaseSalir * 0.4;
-          }
+          // NOTA: Ya no penalizamos por "segunda vuelta" aqui
+          // La segunda vuelta solo aplica si YA trabajaste en el dia (doble turno)
+          // Eso se maneja en otro lugar, no en el calculo de probabilidad base
 
           // IMPORTANTE: Asegurar que probBaseSalir este siempre en rango valido [0, 0.99]
           probBaseSalir = Math.max(0, Math.min(0.99, probBaseSalir));
@@ -6200,16 +6220,31 @@ async function loadCalculadora() {
           });
         }
 
-        // NUEVO SISTEMA: Probabilidades condicionales
-        // La probabilidad de cada jornada depende de NO haber salido en las anteriores
-        // P(J1) = probBase_J1
-        // P(J2) = (1 - P(J1)) * probBase_J2_ajustada
-        // P(J3) = (1 - P(J1)) * (1 - P(J2|no J1)) * probBase_J3_ajustada
-        // P(NoTrabajar) = producto de (1 - P(Ji)) para todas las jornadas
+        // SISTEMA SIMPLIFICADO DE PROBABILIDADES
+        // Calcular la demanda total del dia y ver cuantas veces "cubre" al usuario
+        // Si la demanda total del dia es suficiente para alcanzar al usuario, prob alta
 
+        var demandaTotalDia = 0;
+        var primeraJornadaConDatos = -1;
+        for (var j = 0; j < puntuacionesJornadas.length; j++) {
+          if (!puntuacionesJornadas[j].sinDatos) {
+            demandaTotalDia += puntuacionesJornadas[j].demandaEventuales;
+            if (primeraJornadaConDatos === -1) {
+              primeraJornadaConDatos = j;
+            }
+          }
+        }
+
+        // Distancia inicial desde la puerta al usuario (primera jornada)
+        var distanciaInicial = primeraJornadaConDatos >= 0 ?
+          puntuacionesJornadas[primeraJornadaConDatos].distanciaNecesaria : 999;
+
+        // Cobertura total: cuantas veces la demanda del dia cubre la distancia al usuario
+        var coberturaTotalDia = demandaTotalDia / Math.max(1, distanciaInicial);
+
+        // Probabilidades condicionales mejoradas
         var probabilidadesFinales = [];
-        var probAcumuladaNoSalir = 1.0; // Probabilidad de no haber salido aun
-        var jornadaAnteriorTeniaAltaProb = false; // Para dar prioridad a la siguiente
+        var probAcumuladaNoSalir = 1.0;
 
         for (var j = 0; j < puntuacionesJornadas.length; j++) {
           var datos = puntuacionesJornadas[j];
@@ -6223,32 +6258,38 @@ async function loadCalculadora() {
             continue;
           }
 
-          // AJUSTE: Si la jornada anterior tenia alta probabilidad (>=65%),
-          // y no saliste en ella, es mas probable que salgas en esta (la siguiente).
-          // La probabilidad residual debe ir principalmente a la jornada inmediata.
           var probBaseSalirAjustada = datos.probBaseSalir;
-          if (jornadaAnteriorTeniaAltaProb) {
-            // Si no saliste en una jornada con alta prob, aumentar ligeramente esta
-            // pero no tanto como para distorsionar los resultados
-            probBaseSalirAjustada = Math.max(datos.probBaseSalir, 0.60);
+
+          // CLAVE: Si la cobertura total del dia es alta (>=1.5),
+          // las jornadas posteriores deben tener probabilidad ajustada
+          // porque si no sales en una, casi seguro sales en la siguiente
+          if (coberturaTotalDia >= 1.5 && j > primeraJornadaConDatos) {
+            // Hay demanda de sobra en el dia, si no saliste antes, saldras ahora
+            // Calcular cuanta demanda queda para esta jornada y siguientes
+            var demandaRestante = 0;
+            for (var k = j; k < puntuacionesJornadas.length; k++) {
+              if (!puntuacionesJornadas[k].sinDatos) {
+                demandaRestante += puntuacionesJornadas[k].demandaEventuales;
+              }
+            }
+            // Si la demanda restante cubre la distancia, alta probabilidad
+            var coberturaRestante = demandaRestante / Math.max(1, datos.distanciaNecesaria);
+            if (coberturaRestante >= 1.0) {
+              probBaseSalirAjustada = Math.max(probBaseSalirAjustada, 0.75);
+            } else if (coberturaRestante >= 0.7) {
+              probBaseSalirAjustada = Math.max(probBaseSalirAjustada, 0.55);
+            }
           }
 
-          // IMPORTANTE: Asegurar que probBaseSalirAjustada este en rango valido [0, 0.99]
-          // para evitar valores negativos en probAcumuladaNoSalir
-          probBaseSalirAjustada = Math.max(0, Math.min(0.99, probBaseSalirAjustada));
+          // Asegurar rango valido
+          probBaseSalirAjustada = Math.max(0, Math.min(0.95, probBaseSalirAjustada));
 
-          // Probabilidad de salir en esta jornada =
-          // P(no salir antes) * P(salir en esta jornada)
+          // Probabilidad de salir en esta jornada
           var probEstaJornada = probAcumuladaNoSalir * probBaseSalirAjustada;
 
           // Actualizar probabilidad acumulada de no salir
           probAcumuladaNoSalir = probAcumuladaNoSalir * (1 - probBaseSalirAjustada);
-
-          // Asegurar que nunca sea negativo (por errores de precision)
           probAcumuladaNoSalir = Math.max(0, probAcumuladaNoSalir);
-
-          // Marcar si esta jornada tiene alta probabilidad para la siguiente iteracion
-          jornadaAnteriorTeniaAltaProb = (datos.probBaseSalir >= 0.65);
 
           probabilidadesFinales.push({
             datos: datos,
@@ -6257,23 +6298,22 @@ async function loadCalculadora() {
           });
         }
 
-        // La probabilidad de no trabajar es la probabilidad de no salir en ninguna
+        // La probabilidad de no trabajar
         var probNoTrabajar = probAcumuladaNoSalir;
 
-        // NO normalizar agresivamente - usar las probabilidades reales
-        // Solo normalizar si la suma es muy diferente de 1 (por errores)
+        // Si la cobertura total es muy alta, forzar prob de no trabajar a ser baja
+        if (coberturaTotalDia >= 2.0) {
+          probNoTrabajar = Math.min(probNoTrabajar, 0.05);
+        } else if (coberturaTotalDia >= 1.5) {
+          probNoTrabajar = Math.min(probNoTrabajar, 0.10);
+        }
+
+        // Normalizar para que sumen 100%
         var sumaProbs = probNoTrabajar;
         for (var j = 0; j < probabilidadesFinales.length; j++) {
           if (!probabilidadesFinales[j].sinDatos) {
             sumaProbs += probabilidadesFinales[j].probabilidad;
           }
-        }
-
-        // Solo normalizar si hay una desviacion significativa (>5%) de 1.0
-        // Esto evita que la normalizacion infle artificialmente las probabilidades
-        var debeNormalizar = (sumaProbs < 0.95 || sumaProbs > 1.05);
-        if (!debeNormalizar) {
-          sumaProbs = 1; // Usar valores sin normalizar
         }
 
         // Proteger contra sumaProbs muy pequena o invalida
